@@ -388,27 +388,37 @@ public sealed class ProcessStatusPage : PageBase
             return;
         }
 
-        int match = audit.Items.Count(i => i.Result == CompareResult.Match);
-        int mismatch = audit.Items.Count(i => i.Result == CompareResult.Mismatch);
-        int total = audit.Items.Count;
+        int newer = audit.CloudNewerCount;   // 云端高于本地 → 报错
+        int older = audit.CloudOlderCount;   // 云端低于本地 → 警告
+        int match = audit.MatchCount;
+        int comparable = audit.ComparableCount;
 
         string evName = audit.EventType ?? "未知赛事";
         string summary;
         Color color;
-        if (mismatch > 0)
+        switch (audit.Severity)
         {
-            summary = $"云端版本校验[{evName}]：✗ {mismatch} 项不一致 / 共 {total} 项";
-            color = Theme.Danger;
-        }
-        else if (match == total)
-        {
-            summary = $"云端版本校验[{evName}]：✓ 全部一致（{total} 项）";
-            color = Theme.Running;
-        }
-        else
-        {
-            summary = $"云端版本校验[{evName}]：{match}/{total} 项已对比";
-            color = Theme.SubtleText;
+            case AuditSeverity.Error:
+                summary = $"云端版本校验[{evName}]：✗ {newer} 项需更新（云端更高）"
+                    + (older > 0 ? $"，{older} 项云端偏旧" : "");
+                color = Theme.Danger;
+                break;
+            case AuditSeverity.Warning:
+                summary = $"云端版本校验[{evName}]：⚠ {older} 项云端版本偏低（可能云端未更新）";
+                color = Theme.Warning;
+                break;
+            default: // Ok
+                if (comparable == 0)
+                {
+                    summary = $"云端版本校验[{evName}]：暂无可对比项";
+                    color = Theme.SubtleText;
+                }
+                else
+                {
+                    summary = $"云端版本校验[{evName}]：✓ 全部一致（{match}/{comparable} 项）";
+                    color = Theme.Running;
+                }
+                break;
         }
 
         _cloudLabel.Text = $"{summary}    ·    {timeTag}";
@@ -425,13 +435,14 @@ public sealed class ProcessStatusPage : PageBase
         {
             string mark = i.Result switch
             {
-                CompareResult.Match => "✓",
-                CompareResult.Mismatch => "✗",
-                _ => "—",
+                CompareResult.Match => "✓ 一致",
+                CompareResult.CloudNewer => "✗ 需更新（云端更高）",
+                CompareResult.CloudOlder => "⚠ 云端偏旧",
+                _ => "— 未对比",
             };
-            string local = string.IsNullOrEmpty(i.LocalVersion) ? "（无）" : i.LocalVersion;
+            string local = string.IsNullOrEmpty(i.LocalVersion) ? "（未运行/无）" : i.LocalVersion;
             string cloud = string.IsNullOrEmpty(i.CloudVersion) ? "（无）" : i.CloudVersion;
-            lines.Add($"{mark} {i.Label}：本地 {local} | 云端 {cloud}");
+            lines.Add($"{i.Label}：本地 {local} | 云端 {cloud}  {mark}");
         }
         if (audit.CloudFetchedAt is not null)
             lines.Add($"云端数据时间：{audit.CloudFetchedAt:yyyy-MM-dd HH:mm:ss}" + (audit.CloudFromCache ? "（缓存）" : ""));

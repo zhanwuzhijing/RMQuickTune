@@ -20,10 +20,23 @@ public enum CompareResult
 {
     /// <summary>本地与云端一致。</summary>
     Match,
-    /// <summary>本地与云端不一致。</summary>
-    Mismatch,
+    /// <summary>云端版本高于本地（本地过旧，需要更新）。</summary>
+    CloudNewer,
+    /// <summary>云端版本低于本地（可能云端尚未更新）。</summary>
+    CloudOlder,
     /// <summary>缺少本地或云端数据，无法对比。</summary>
     Unknown,
+}
+
+/// <summary>整体严重级别。</summary>
+public enum AuditSeverity
+{
+    /// <summary>全部一致或无可比项。</summary>
+    Ok,
+    /// <summary>存在云端低于本地（黄色警告）。</summary>
+    Warning,
+    /// <summary>存在云端高于本地（红色报错）。</summary>
+    Error,
 }
 
 /// <summary>整体云端校验结果。</summary>
@@ -42,6 +55,24 @@ public sealed class CloudAuditResult
 
     /// <summary>是否拿到了云端数据。</summary>
     public bool HasCloudData { get; init; }
+
+    /// <summary>整体严重级别：取所有项中最严重的。</summary>
+    public AuditSeverity Severity
+    {
+        get
+        {
+            bool anyError = Items.Any(i => i.Result == CompareResult.CloudNewer);
+            if (anyError) return AuditSeverity.Error;
+            bool anyWarn = Items.Any(i => i.Result == CompareResult.CloudOlder);
+            if (anyWarn) return AuditSeverity.Warning;
+            return AuditSeverity.Ok;
+        }
+    }
+
+    public int MatchCount => Items.Count(i => i.Result == CompareResult.Match);
+    public int CloudNewerCount => Items.Count(i => i.Result == CompareResult.CloudNewer);
+    public int CloudOlderCount => Items.Count(i => i.Result == CompareResult.CloudOlder);
+    public int ComparableCount => Items.Count(i => i.Result != CompareResult.Unknown);
 }
 
 /// <summary>
@@ -167,8 +198,41 @@ public static class CloudVersionAudit
     {
         if (string.IsNullOrEmpty(local) || string.IsNullOrEmpty(cloud))
             return CompareResult.Unknown;
-        return string.Equals(local.Trim(), cloud.Trim(), StringComparison.OrdinalIgnoreCase)
-            ? CompareResult.Match
-            : CompareResult.Mismatch;
+
+        string l = local.Trim();
+        string c = cloud.Trim();
+
+        if (string.Equals(l, c, StringComparison.OrdinalIgnoreCase))
+            return CompareResult.Match;
+
+        int cmp = CompareVersionStrings(l, c);
+        // cmp < 0：本地 < 云端 → 云端更新（报错）；cmp > 0：本地 > 云端 → 云端更旧（警告）
+        return cmp < 0 ? CompareResult.CloudNewer : CompareResult.CloudOlder;
+    }
+
+    /// <summary>
+    /// 按四段式数字逐段比较版本号。返回 &lt;0 表示 a&lt;b，&gt;0 表示 a&gt;b，0 表示相等。
+    /// 非数字段做兜底字符串比较。
+    /// </summary>
+    private static int CompareVersionStrings(string a, string b)
+    {
+        var pa = a.Split('.');
+        var pb = b.Split('.');
+        int len = Math.Max(pa.Length, pb.Length);
+        for (int i = 0; i < len; i++)
+        {
+            string sa = i < pa.Length ? pa[i] : "0";
+            string sb = i < pb.Length ? pb[i] : "0";
+            if (int.TryParse(sa, out int na) && int.TryParse(sb, out int nb))
+            {
+                if (na != nb) return na.CompareTo(nb);
+            }
+            else
+            {
+                int c = string.CompareOrdinal(sa, sb);
+                if (c != 0) return c;
+            }
+        }
+        return 0;
     }
 }

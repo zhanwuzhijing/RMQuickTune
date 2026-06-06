@@ -30,6 +30,8 @@ public static class Theme
     // ---- 危险/警告色 ----
     public static readonly Color Danger = Color.FromArgb(229, 72, 77);
     public static readonly Color DangerSoft = Color.FromArgb(253, 232, 233);
+    public static readonly Color Warning = Color.FromArgb(201, 148, 0);
+    public static readonly Color WarningSoft = Color.FromArgb(255, 244, 214);
 
     // ---- 字体 ----
     public const string FontFamily = "Microsoft YaHei UI";

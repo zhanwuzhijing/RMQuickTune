@@ -1,0 +1,38 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- 应用元信息 -->
+    <AssemblyName>RMQuickTune</AssemblyName>
+    <RootNamespace>RMQuickTune</RootNamespace>
+    <Product>RMQuickTune</Product>
+    <Company>zhanwuzhijing</Company>
+    <Version>0.1.0</Version>
+    <Description>RoboMaster 赛事引擎配置检查工具（网络配置 / 依赖程序检测等）</Description>
+
+    <!-- 目标运行平台 -->
+    <Platforms>AnyCPU;x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <!--
+    自包含单文件发布配置（免依赖运行）。
+    发布命令见 README：
+      dotnet publish -c Release
+    将运行时一并打包，目标电脑无需安装 .NET 运行时即可双击运行。
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+</Project>

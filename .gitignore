@@ -1,0 +1,48 @@
+# ---- 构建产物 ----
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+
+# ---- Visual Studio / Rider / VS Code ----
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# ---- 发布产物 ----
+publish/
+[Pp]ublish/
+*.publishproj
+PublishProfiles/
+
+# ---- .NET ----
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.nupkg
+*.snupkg
+.dotnet/
+
+# ---- 调试 / 符号 ----
+*.pdb
+*.mdb
+*.opendb
+*.cache
+
+# ---- 系统文件 ----
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# ---- 临时文件 ----
+*.tmp
+*.temp
+*~

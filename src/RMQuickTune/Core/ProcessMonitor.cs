@@ -167,4 +167,89 @@ public sealed class ProcessMonitor
 
         return result;
     }
+
+    /// <summary>
+    /// 结束指定分类下所有正在运行的目标程序。
+    /// 先尝试优雅关闭（CloseMainWindow），稍候未退出则强制结束（Kill）。
+    /// </summary>
+    /// <returns>实际结束的进程数量，以及失败的程序名列表。</returns>
+    public KillResult KillCategory(ProcessCategory category)
+    {
+        var targetNames = _targets
+            .Where(t => t.Category == category)
+            .Select(t => t.ProcessName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        int killed = 0;
+        var failed = new List<string>();
+
+        Process[] all;
+        try { all = Process.GetProcesses(); }
+        catch { return new KillResult { Killed = 0, Failed = { } }; }
+
+        var toKill = new List<Process>();
+        foreach (var p in all)
+        {
+            string name;
+            try { name = p.ProcessName; }
+            catch { continue; }
+
+            if (targetNames.Contains(name))
+                toKill.Add(p);
+            else
+            {
+                try { p.Dispose(); } catch { /* ignore */ }
+            }
+        }
+
+        // 第一轮：尝试优雅关闭有主窗口的进程
+        foreach (var p in toKill)
+        {
+            try
+            {
+                if (p.MainWindowHandle != IntPtr.Zero)
+                    p.CloseMainWindow();
+            }
+            catch { /* ignore */ }
+        }
+
+        // 给优雅关闭一点时间
+        System.Threading.Thread.Sleep(400);
+
+        // 第二轮：仍未退出的强制结束
+        foreach (var p in toKill)
+        {
+            try
+            {
+                p.Refresh();
+                if (!p.HasExited)
+                {
+                    p.Kill(entireProcessTree: true);
+                    p.WaitForExit(2000);
+                }
+                killed++;
+            }
+            catch (Exception)
+            {
+                string exe;
+                try { exe = p.ProcessName + ".exe"; } catch { exe = "(未知)"; }
+                if (!failed.Contains(exe))
+                    failed.Add(exe);
+            }
+            finally
+            {
+                try { p.Dispose(); } catch { /* ignore */ }
+            }
+        }
+
+        return new KillResult { Killed = killed, Failed = failed };
+    }
+}
+
+/// <summary>批量结束进程的结果。</summary>
+public sealed class KillResult
+{
+    public int Killed { get; init; }
+    public List<string> Failed { get; init; } = new();
+    public bool HasFailures => Failed.Count > 0;
 }

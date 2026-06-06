@@ -11,7 +11,11 @@ public sealed class CategoryColumn : Panel
     private readonly ProcessCategory _category;
     private readonly Label _titleLabel;
     private readonly CountBadge _countBadge;
+    private readonly RoundButton _closeBtn;
     private readonly FlowLayoutPanel _cardArea;
+
+    /// <summary>点击「一键关闭」按钮时触发，参数为本栏分类。</summary>
+    public event Action<ProcessCategory>? CloseRequested;
 
     /// <summary>该栏内 ExeName -> 卡片 的映射。</summary>
     public IReadOnlyDictionary<string, ProcessCard> Cards { get; }
@@ -57,11 +61,21 @@ public sealed class CategoryColumn : Panel
             Size = new Size(64, 26),
         };
 
+        _closeBtn = new RoundButton("一键关闭")
+        {
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            Size = new Size(96, 32),
+            BaseColor = Theme.Danger,
+            Ghost = true,
+        };
+        _closeBtn.Click += (_, _) => CloseRequested?.Invoke(_category);
+
         headerBar.Controls.Add(accentBar);
         headerBar.Controls.Add(_titleLabel);
         headerBar.Controls.Add(_countBadge);
-        headerBar.Resize += (_, _) =>
-            _countBadge.Location = new Point(headerBar.Width - _countBadge.Width - 18, 19);
+        headerBar.Controls.Add(_closeBtn);
+        headerBar.Resize += (_, _) => LayoutHeader(headerBar);
+        LayoutHeader(headerBar);
 
         // 分隔线
         var divider = new Panel
@@ -110,6 +124,15 @@ public sealed class CategoryColumn : Panel
         if (w <= 0) return;
         foreach (ProcessCard card in _cardArea.Controls)
             card.Width = w;
+    }
+
+    /// <summary>右侧自右向左排列：一键关闭按钮 + 计数徽章。</summary>
+    private void LayoutHeader(Panel headerBar)
+    {
+        int right = headerBar.Width - 18;
+        _closeBtn.Location = new Point(right - _closeBtn.Width, (headerBar.Height - _closeBtn.Height) / 2);
+        right -= _closeBtn.Width + 10;
+        _countBadge.Location = new Point(right - _countBadge.Width, (headerBar.Height - _countBadge.Height) / 2);
     }
 
     public void UpdateSummary(int running, int total)

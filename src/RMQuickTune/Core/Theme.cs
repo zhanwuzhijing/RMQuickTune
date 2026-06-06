@@ -27,6 +27,10 @@ public static class Theme
     public static readonly Color Stopped = Color.FromArgb(160, 168, 178);
     public static readonly Color StoppedSoft = Color.FromArgb(238, 240, 243);
 
+    // ---- 危险/警告色 ----
+    public static readonly Color Danger = Color.FromArgb(229, 72, 77);
+    public static readonly Color DangerSoft = Color.FromArgb(253, 232, 233);
+
     // ---- 字体 ----
     public const string FontFamily = "Microsoft YaHei UI";
 

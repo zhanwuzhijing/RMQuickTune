@@ -91,6 +91,7 @@ public sealed class ProcessStatusPage : PageBase
             var col = new CategoryColumn(cat, items);
             foreach (var kv in col.Cards)
                 _cardByExe[kv.Key] = kv.Value;
+            col.CloseRequested += OnCloseCategoryRequested;
 
             col.Margin = new Padding(i == 0 ? 0 : 8, 4, i == categories.Length - 1 ? 0 : 8, 0);
             _categoryColumns.Add(col);
@@ -120,6 +121,54 @@ public sealed class ProcessStatusPage : PageBase
     }
 
     public override void OnDeactivated() => _timer.Stop();
+
+    /// <summary>处理「一键关闭」请求：确认后结束该分类下所有运行中的程序。</summary>
+    private void OnCloseCategoryRequested(ProcessCategory category)
+    {
+        // 先统计当前运行中的数量
+        var statuses = _monitor.CheckAll();
+        int runningInCat = statuses.Count(s => s.Category == category && s.IsRunning);
+
+        if (runningInCat == 0)
+        {
+            MessageBox.Show(this,
+                $"{category.DisplayName()}当前没有正在运行的程序。",
+                "一键关闭",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var confirm = MessageBox.Show(this,
+            $"确定要关闭「{category.DisplayName()}」下正在运行的 {runningInCat} 个程序吗？\n\n" +
+            "程序将被强制结束，未保存的数据可能丢失。",
+            "确认关闭",
+            MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+
+        if (confirm != DialogResult.Yes)
+            return;
+
+        Cursor = Cursors.WaitCursor;
+        KillResult result;
+        try
+        {
+            result = _monitor.KillCategory(category);
+        }
+        finally
+        {
+            Cursor = Cursors.Default;
+        }
+
+        RefreshStatus();
+
+        if (result.HasFailures)
+        {
+            MessageBox.Show(this,
+                $"已关闭 {result.Killed} 个程序。\n以下程序关闭失败（可能需要管理员权限）：\n\n" +
+                string.Join("\n", result.Failed),
+                "一键关闭",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
 
     private void RefreshStatus()
     {

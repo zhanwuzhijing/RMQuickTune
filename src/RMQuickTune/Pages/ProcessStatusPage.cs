@@ -77,12 +77,12 @@ public sealed class ProcessStatusPage : PageBase
             Dock = DockStyle.Fill,
             BackColor = Theme.ContentBg,
             Padding = new Padding(22, 0, 22, 16),
-            ColumnCount = 1,
-            RowCount = categories.Length,
+            ColumnCount = categories.Length,
+            RowCount = 1,
         };
-        _columns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
         for (int i = 0; i < categories.Length; i++)
-            _columns.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / categories.Length));
+            _columns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / categories.Length));
+        _columns.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
         for (int i = 0; i < categories.Length; i++)
         {
@@ -92,9 +92,9 @@ public sealed class ProcessStatusPage : PageBase
             foreach (var kv in col.Cards)
                 _cardByExe[kv.Key] = kv.Value;
 
-            col.Margin = new Padding(0, i == 0 ? 4 : 8, 0, i == categories.Length - 1 ? 0 : 8);
+            col.Margin = new Padding(i == 0 ? 0 : 8, 4, i == categories.Length - 1 ? 0 : 8, 0);
             _categoryColumns.Add(col);
-            _columns.Controls.Add(col, 0, i);
+            _columns.Controls.Add(col, i, 0);
         }
 
         Controls.Add(_columns);

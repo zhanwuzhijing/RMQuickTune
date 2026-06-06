@@ -34,9 +34,9 @@ public static class Theme
     public static Font NavItem { get; } = new(FontFamily, 10.5F);
     public static Font PageTitle { get; } = new(FontFamily, 17F, FontStyle.Bold);
     public static Font PageSubtitle { get; } = new(FontFamily, 9.5F);
-    public static Font CardTitle { get; } = new(FontFamily, 10.5F, FontStyle.Bold);
-    public static Font CardMeta { get; } = new(FontFamily, 8.5F);
-    public static Font Badge { get; } = new(FontFamily, 8.5F, FontStyle.Bold);
+    public static Font CardTitle { get; } = new(FontFamily, 12F, FontStyle.Bold);
+    public static Font CardMeta { get; } = new(FontFamily, 9.5F);
+    public static Font Badge { get; } = new(FontFamily, 9.5F, FontStyle.Bold);
 
     /// <summary>创建一条圆角矩形路径。</summary>
     public static System.Drawing.Drawing2D.GraphicsPath RoundedRect(Rectangle r, int radius)

@@ -24,7 +24,7 @@ public sealed class ProcessCard : Control
             | ControlStyles.UserPaint
             | ControlStyles.ResizeRedraw
             | ControlStyles.SupportsTransparentBackColor, true);
-        Height = 64;
+        MinimumSize = new Size(0, 56);
         BackColor = Color.Transparent;
         Cursor = Cursors.Default;
     }
@@ -71,6 +71,7 @@ public sealed class ProcessCard : Control
         }
 
         var accent = _isRunning ? Theme.Running : Theme.Stopped;
+        int cy = Height / 2;
 
         // 左侧色条
         using (var stripPath = Theme.RoundedRect(new Rectangle(0, 0, 8, Height - 1), 4))
@@ -78,25 +79,28 @@ public sealed class ProcessCard : Control
             g.FillPath(strip, stripPath);
 
         // 状态灯（圆点 + 柔光圈）
-        int dotX = 26, dotY = Height / 2;
+        int dotX = 30;
         using (var halo = new SolidBrush(_isRunning ? Theme.RunningSoft : Theme.StoppedSoft))
-            g.FillEllipse(halo, dotX - 11, dotY - 11, 22, 22);
+            g.FillEllipse(halo, dotX - 14, cy - 14, 28, 28);
         using (var dot = new SolidBrush(accent))
-            g.FillEllipse(dot, dotX - 5, dotY - 5, 10, 10);
+            g.FillEllipse(dot, dotX - 6, cy - 6, 12, 12);
 
-        // 程序名
-        var nameRect = new Rectangle(48, 10, Width - 48 - 110, 26);
+        // 文本区（垂直居中：程序名 + 副信息 两行）
+        int textX = 56;
+        int textRight = Width - 130;
+        int textW = Math.Max(40, textRight - textX);
+
+        var nameRect = new Rectangle(textX, cy - 22, textW, 24);
         TextRenderer.DrawText(g, ExeName, Theme.CardTitle, nameRect,
             _isRunning ? Theme.TitleText : Theme.SubtleText,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
-        // 副信息：PID / 实例数
         string meta = _isRunning
             ? (_instanceCount > 1
                 ? $"PID {_pid}   ·   {_instanceCount} 个实例"
                 : $"PID {_pid}")
             : "未运行";
-        var metaRect = new Rectangle(48, 34, Width - 48 - 110, 20);
+        var metaRect = new Rectangle(textX, cy + 2, textW, 22);
         TextRenderer.DrawText(g, meta, Theme.CardMeta, metaRect, Theme.SubtleText,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
@@ -111,9 +115,9 @@ public sealed class ProcessCard : Control
         var softColor = running ? Theme.RunningSoft : Theme.StoppedSoft;
 
         var size = TextRenderer.MeasureText(text, Theme.Badge);
-        int w = size.Width + 24;
-        int h = 24;
-        var badgeRect = new Rectangle(Width - w - 16, (Height - h) / 2, w, h);
+        int w = size.Width + 28;
+        int h = 28;
+        var badgeRect = new Rectangle(Width - w - 18, (Height - h) / 2, w, h);
 
         using (var path = Theme.RoundedRect(badgeRect, h / 2))
         using (var bg = new SolidBrush(softColor))

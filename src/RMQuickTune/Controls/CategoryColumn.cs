@@ -12,7 +12,7 @@ public sealed class CategoryColumn : Panel
     private readonly Label _titleLabel;
     private readonly Label _descLabel;
     private readonly CountBadge _countBadge;
-    private readonly FlowLayoutPanel _cardArea;
+    private readonly TableLayoutPanel _cardArea;
 
     /// <summary>该栏内 ExeName -> 卡片 的映射。</summary>
     public IReadOnlyDictionary<string, ProcessCard> Cards { get; }
@@ -81,56 +81,35 @@ public sealed class CategoryColumn : Panel
             BackColor = Theme.CardBorder,
         };
 
-        // ---- 卡片列表 ----
-        _cardArea = new FlowLayoutPanel
+        // ---- 卡片列表：每行一个卡片，行高均分填满整列 ----
+        _cardArea = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            AutoScroll = true,
             BackColor = Theme.CardBg,
             Padding = new Padding(14, 12, 14, 14),
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = true,
+            ColumnCount = 1,
+            RowCount = items.Count,
         };
+        _cardArea.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        for (int r = 0; r < items.Count; r++)
+            _cardArea.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / Math.Max(1, items.Count)));
 
         var cards = new Dictionary<string, ProcessCard>(StringComparer.OrdinalIgnoreCase);
-        foreach (var item in items)
+        for (int r = 0; r < items.Count; r++)
         {
-            var card = new ProcessCard(item.ExeName)
+            var card = new ProcessCard(items[r].ExeName)
             {
-                Margin = new Padding(0, 0, 12, 12),
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, r == 0 ? 0 : 5, 0, 5),
             };
-            cards[item.ExeName] = card;
-            _cardArea.Controls.Add(card);
+            cards[items[r].ExeName] = card;
+            _cardArea.Controls.Add(card, 0, r);
         }
         Cards = cards;
-
-        _cardArea.Resize += (_, _) => ResizeCards();
 
         Controls.Add(_cardArea);
         Controls.Add(divider);
         Controls.Add(headerBar);
-
-        ResizeCards();
-    }
-
-    private void ResizeCards()
-    {
-        // 预留垂直滚动条宽度，避免触发水平滚动条
-        int avail = _cardArea.ClientSize.Width - _cardArea.Padding.Horizontal;
-        if (avail <= 0) return;
-
-        const int gap = 12;            // 卡片右侧 margin
-        const int minCardWidth = 300;  // 单卡最小宽度
-
-        // 计算能放下几列（至少 1 列）
-        int columns = Math.Max(1, (avail + gap) / (minCardWidth + gap));
-        int cardWidth = (avail - gap * (columns - 1)) / columns;
-        if (cardWidth < 1) cardWidth = avail;
-
-        _cardArea.SuspendLayout();
-        foreach (ProcessCard card in _cardArea.Controls)
-            card.Width = cardWidth;
-        _cardArea.ResumeLayout();
     }
 
     public void UpdateSummary(int running, int total)

@@ -1,155 +1,149 @@
+using RMQuickTune.Controls;
 using RMQuickTune.Core;
 
 namespace RMQuickTune.Pages;
 
 /// <summary>
-/// 主界面：显示 RoboMaster 赛事引擎相关程序的运行状态。
-/// 定时自动刷新，绿色=运行中，灰色=未运行。
+/// 主界面：以卡片网格展示 RoboMaster 赛事引擎相关程序的运行状态。
+/// 定时自动刷新，绿色=运行中，灰色=已停止。
 /// </summary>
 public sealed class ProcessStatusPage : PageBase
 {
     private readonly ProcessMonitor _monitor = new();
     private readonly System.Windows.Forms.Timer _timer;
-    private readonly ListView _list;
-    private readonly Label _summary;
-    private readonly Button _refreshBtn;
 
-    private static readonly Color RunningColor = Color.FromArgb(46, 160, 67);
-    private static readonly Color StoppedColor = Color.FromArgb(160, 160, 160);
+    private readonly Panel _header;
+    private readonly Label _titleLabel;
+    private readonly Label _summaryLabel;
+    private readonly RoundButton _refreshBtn;
+    private readonly FlowLayoutPanel _cardArea;
+    private readonly List<ProcessCard> _cards = new();
 
     public override string DisplayName => "运行状态";
 
     public ProcessStatusPage()
     {
-        Padding = new Padding(16);
+        BackColor = Theme.ContentBg;
 
-        // 顶部标题
-        var title = new Label
+        // ---- 顶部标题栏 ----
+        _header = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 92,
+            BackColor = Theme.ContentBg,
+            Padding = new Padding(28, 20, 28, 0),
+        };
+
+        _titleLabel = new Label
         {
             Text = "程序运行状态",
-            Font = new Font("Microsoft YaHei UI", 14F, FontStyle.Bold),
+            Font = Theme.PageTitle,
+            ForeColor = Theme.TitleText,
             AutoSize = true,
-            Location = new Point(16, 12),
+            Location = new Point(28, 18),
         };
 
-        _summary = new Label
+        _summaryLabel = new Label
         {
             Text = "正在检测…",
-            Font = new Font("Microsoft YaHei UI", 9F),
-            ForeColor = Color.Gray,
+            Font = Theme.PageSubtitle,
+            ForeColor = Theme.SubtleText,
             AutoSize = true,
-            Location = new Point(18, 44),
+            Location = new Point(30, 54),
         };
 
-        _refreshBtn = new Button
+        _refreshBtn = new RoundButton("立即刷新")
         {
-            Text = "立即刷新",
-            Size = new Size(90, 30),
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
-            FlatStyle = FlatStyle.System,
         };
-        _refreshBtn.Click += (_, _) => Refresh(force: true);
+        _refreshBtn.Click += (_, _) => RefreshStatus();
 
-        // 进程列表
-        _list = new ListView
+        _header.Controls.Add(_titleLabel);
+        _header.Controls.Add(_summaryLabel);
+        _header.Controls.Add(_refreshBtn);
+        _header.Resize += (_, _) => PositionRefreshButton();
+
+        // ---- 卡片区（可滚动、自动换行）----
+        _cardArea = new FlowLayoutPanel
         {
-            View = View.Details,
-            FullRowSelect = true,
-            GridLines = true,
-            HeaderStyle = ColumnHeaderStyle.Nonclickable,
-            Location = new Point(16, 72),
-            BorderStyle = BorderStyle.FixedSingle,
-            Font = new Font("Microsoft YaHei UI", 9.5F),
-            OwnerDraw = false,
-            MultiSelect = false,
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            BackColor = Theme.ContentBg,
+            Padding = new Padding(22, 4, 22, 22),
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
         };
-        _list.Columns.Add("状态", 70, HorizontalAlignment.Center);
-        _list.Columns.Add("程序", 320, HorizontalAlignment.Left);
-        _list.Columns.Add("PID", 90, HorizontalAlignment.Center);
-        _list.Columns.Add("实例数", 80, HorizontalAlignment.Center);
+        _cardArea.Resize += (_, _) => ResizeCards();
 
-        // 预先为每个目标程序建立一行
         foreach (var target in _monitor.Targets)
         {
-            var item = new ListViewItem(new[] { "●", target.ExeName, "-", "-" })
+            var card = new ProcessCard(target.ExeName)
             {
-                UseItemStyleForSubItems = false,
+                Margin = new Padding(6),
             };
-            _list.Items.Add(item);
+            _cards.Add(card);
+            _cardArea.Controls.Add(card);
         }
 
-        Controls.Add(_list);
-        Controls.Add(title);
-        Controls.Add(_summary);
-        Controls.Add(_refreshBtn);
+        Controls.Add(_cardArea);
+        Controls.Add(_header);
 
-        Resize += (_, _) => LayoutControls();
-        LayoutControls();
+        PositionRefreshButton();
+        ResizeCards();
 
         _timer = new System.Windows.Forms.Timer { Interval = 2000 };
-        _timer.Tick += (_, _) => Refresh(force: false);
+        _timer.Tick += (_, _) => RefreshStatus();
     }
 
-    private void LayoutControls()
+    private void PositionRefreshButton()
     {
-        _refreshBtn.Location = new Point(ClientSize.Width - _refreshBtn.Width - 16, 16);
-        _list.Size = new Size(
-            ClientSize.Width - 32,
-            ClientSize.Height - _list.Top - 16);
+        _refreshBtn.Location = new Point(
+            _header.ClientSize.Width - _refreshBtn.Width - 28,
+            (_header.Height - _refreshBtn.Height) / 2 + 4);
+    }
+
+    /// <summary>根据可用宽度让卡片自适应：宽屏两列，窄屏单列。</summary>
+    private void ResizeCards()
+    {
+        int avail = _cardArea.ClientSize.Width - _cardArea.Padding.Horizontal;
+        if (avail <= 0) return;
+
+        // 每列最小约 360px，决定列数（1 或 2）
+        int columns = avail >= 760 ? 2 : 1;
+        int margin = 12; // 每张卡左右 margin 合计
+        int cardWidth = (avail / columns) - margin;
+        if (cardWidth < 280) cardWidth = avail - margin;
+
+        _cardArea.SuspendLayout();
+        foreach (var card in _cards)
+            card.Width = cardWidth;
+        _cardArea.ResumeLayout();
     }
 
     public override void OnActivated()
     {
-        Refresh(force: true);
+        RefreshStatus();
         _timer.Start();
     }
 
-    public override void OnDeactivated()
-    {
-        _timer.Stop();
-    }
+    public override void OnDeactivated() => _timer.Stop();
 
-    private void Refresh(bool force)
+    private void RefreshStatus()
     {
         var statuses = _monitor.CheckAll();
-        int runningCount = 0;
+        int running = 0;
 
-        _list.BeginUpdate();
-        try
+        for (int i = 0; i < statuses.Count && i < _cards.Count; i++)
         {
-            for (int i = 0; i < statuses.Count && i < _list.Items.Count; i++)
-            {
-                var s = statuses[i];
-                var item = _list.Items[i];
-
-                if (s.IsRunning) runningCount++;
-
-                // 状态圆点
-                item.SubItems[0].Text = "●";
-                item.SubItems[0].ForeColor = s.IsRunning ? RunningColor : StoppedColor;
-
-                // 程序名
-                item.SubItems[1].Text = s.ExeName;
-                item.SubItems[1].ForeColor = s.IsRunning ? Color.Black : Color.Gray;
-
-                // PID
-                item.SubItems[2].Text = s.Pid?.ToString() ?? "-";
-                item.SubItems[2].ForeColor = Color.DimGray;
-
-                // 实例数
-                item.SubItems[3].Text = s.InstanceCount > 0 ? s.InstanceCount.ToString() : "-";
-                item.SubItems[3].ForeColor = Color.DimGray;
-            }
-        }
-        finally
-        {
-            _list.EndUpdate();
+            var s = statuses[i];
+            if (s.IsRunning) running++;
+            _cards[i].UpdateStatus(s.IsRunning, s.InstanceCount, s.Pid);
         }
 
-        _summary.Text = $"运行中 {runningCount} / {statuses.Count}    最后刷新 {DateTime.Now:HH:mm:ss}";
-        _summary.ForeColor = runningCount == statuses.Count
-            ? RunningColor
-            : Color.Gray;
+        bool allUp = running == statuses.Count;
+        _summaryLabel.Text =
+            $"运行中 {running} / {statuses.Count}      最后刷新 {DateTime.Now:HH:mm:ss}";
+        _summaryLabel.ForeColor = allUp ? Theme.Running : Theme.SubtleText;
     }
 
     protected override void Dispose(bool disposing)

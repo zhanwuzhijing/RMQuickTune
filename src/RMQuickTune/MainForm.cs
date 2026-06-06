@@ -1,41 +1,38 @@
+using RMQuickTune.Controls;
 using RMQuickTune.Core;
 using RMQuickTune.Pages;
 
 namespace RMQuickTune;
 
 /// <summary>
-/// 主窗体：左侧为可扩展的功能侧边栏，右侧为内容区。
+/// 主窗体：左侧可扩展功能侧边栏，右侧内容区。
 /// 新增功能页时，在 <see cref="RegisterPages"/> 中添加一行即可。
 /// </summary>
 public sealed class MainForm : Form
 {
     private readonly Panel _sidebar;
     private readonly Panel _content;
-    private readonly Label _brand;
 
-    private readonly List<(Button Button, PageBase Page)> _pages = new();
+    private readonly List<(NavButton Button, PageBase Page)> _pages = new();
     private PageBase? _currentPage;
 
-    private static readonly Color SidebarColor = Color.FromArgb(33, 37, 43);
-    private static readonly Color SidebarHover = Color.FromArgb(55, 60, 68);
-    private static readonly Color SidebarActive = Color.FromArgb(0, 122, 204);
-    private static readonly Color SidebarText = Color.FromArgb(220, 220, 220);
-
-    private const int SidebarWidth = 180;
+    private const int SidebarWidth = 196;
 
     public MainForm()
     {
         Text = "RMQuickTune - RoboMaster 配置检查工具";
-        MinimumSize = new Size(820, 520);
-        ClientSize = new Size(960, 600);
+        MinimumSize = new Size(840, 560);
+        ClientSize = new Size(1000, 640);
         StartPosition = FormStartPosition.CenterScreen;
-        Font = new Font("Microsoft YaHei UI", 9F);
+        Font = new Font(Theme.FontFamily, 9F);
+        BackColor = Theme.ContentBg;
+        DoubleBuffered = true;
 
-        // 右侧内容区（先加入，使其填充剩余空间）
+        // 右侧内容区（先加入，填充剩余空间）
         _content = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = Color.White,
+            BackColor = Theme.ContentBg,
         };
 
         // 左侧侧边栏
@@ -43,31 +40,63 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Left,
             Width = SidebarWidth,
-            BackColor = SidebarColor,
+            BackColor = Theme.SidebarBg,
         };
 
-        _brand = new Label
-        {
-            Text = "RMQuickTune",
-            ForeColor = Color.White,
-            Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold),
-            Dock = DockStyle.Top,
-            Height = 56,
-            TextAlign = ContentAlignment.MiddleCenter,
-            BackColor = Color.FromArgb(24, 27, 32),
-        };
-        _sidebar.Controls.Add(_brand);
+        var brand = BuildBrandHeader();
+        _sidebar.Controls.Add(brand);
 
         Controls.Add(_content);
         Controls.Add(_sidebar);
 
         RegisterPages();
 
-        // 默认选中第一个页面
         if (_pages.Count > 0)
-        {
             SwitchTo(_pages[0].Page, _pages[0].Button);
-        }
+    }
+
+    private Panel BuildBrandHeader()
+    {
+        var header = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 72,
+            BackColor = Theme.SidebarBrandBg,
+        };
+
+        var logo = new Label
+        {
+            Text = "RM",
+            Font = new Font(Theme.FontFamily, 12F, FontStyle.Bold),
+            ForeColor = Color.White,
+            BackColor = Theme.Accent,
+            Size = new Size(38, 38),
+            TextAlign = ContentAlignment.MiddleCenter,
+            Location = new Point(18, 17),
+        };
+
+        var title = new Label
+        {
+            Text = "QuickTune",
+            Font = Theme.Brand,
+            ForeColor = Color.White,
+            AutoSize = true,
+            Location = new Point(64, 18),
+        };
+
+        var subtitle = new Label
+        {
+            Text = "配置检查工具",
+            Font = new Font(Theme.FontFamily, 8F),
+            ForeColor = Theme.SidebarItemText,
+            AutoSize = true,
+            Location = new Point(66, 42),
+        };
+
+        header.Controls.Add(title);
+        header.Controls.Add(subtitle);
+        header.Controls.Add(logo);
+        return header;
     }
 
     /// <summary>
@@ -83,50 +112,29 @@ public sealed class MainForm : Form
 
     private void AddPage(PageBase page)
     {
-        var btn = new Button
-        {
-            Text = "   " + page.DisplayName,
-            Dock = DockStyle.Top,
-            Height = 44,
-            FlatStyle = FlatStyle.Flat,
-            ForeColor = SidebarText,
-            BackColor = SidebarColor,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Font = new Font("Microsoft YaHei UI", 10.5F),
-            Cursor = Cursors.Hand,
-            Tag = page,
-        };
-        btn.FlatAppearance.BorderSize = 0;
-        btn.FlatAppearance.MouseOverBackColor = SidebarHover;
-
+        var btn = new NavButton(page.DisplayName) { Tag = page };
         btn.Click += (_, _) => SwitchTo(page, btn);
 
-        // 让按钮叠放顺序与注册顺序一致（Dock=Top 是逆序堆叠）
+        // Dock=Top 逆序堆叠，加完置顶并把品牌头压回最上
         _sidebar.Controls.Add(btn);
         btn.BringToFront();
-        _brand.BringToFront();
+        if (_sidebar.Controls.Count > 0)
+            _sidebar.Controls[0].BringToFront(); // brand header
 
         _pages.Add((btn, page));
     }
 
-    private void SwitchTo(PageBase page, Button button)
+    private void SwitchTo(PageBase page, NavButton button)
     {
         if (ReferenceEquals(_currentPage, page))
             return;
 
         _currentPage?.OnDeactivated();
 
-        // 更新侧边栏按钮高亮
         foreach (var (b, _) in _pages)
-        {
-            b.BackColor = SidebarColor;
-            b.ForeColor = SidebarText;
-            b.FlatAppearance.BorderSize = 0;
-        }
-        button.BackColor = SidebarActive;
-        button.ForeColor = Color.White;
+            b.Active = false;
+        button.Active = true;
 
-        // 切换内容区
         _content.SuspendLayout();
         _content.Controls.Clear();
         _content.Controls.Add(page);
@@ -141,9 +149,7 @@ public sealed class MainForm : Form
         if (disposing)
         {
             foreach (var (_, page) in _pages)
-            {
                 page.Dispose();
-            }
         }
         base.Dispose(disposing);
     }

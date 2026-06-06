@@ -21,9 +21,10 @@ public sealed class MainForm : Form
     public MainForm()
     {
         Text = "RMQuickTune - RoboMaster 配置检查工具";
-        MinimumSize = new Size(840, 560);
-        ClientSize = new Size(1000, 640);
+        MinimumSize = new Size(960, 600);
+        ClientSize = new Size(1280, 800);
         StartPosition = FormStartPosition.CenterScreen;
+        WindowState = FormWindowState.Maximized;
         Font = new Font(Theme.FontFamily, 9F);
         BackColor = Theme.ContentBg;
         DoubleBuffered = true;

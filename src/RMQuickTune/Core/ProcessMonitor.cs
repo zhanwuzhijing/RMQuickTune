@@ -2,6 +2,34 @@ using System.Diagnostics;
 
 namespace RMQuickTune.Core;
 
+/// <summary>程序所属的分类（用于界面分栏）。</summary>
+public enum ProcessCategory
+{
+    /// <summary>裁判端：服务 / 引擎侧程序。</summary>
+    Referee,
+
+    /// <summary>选手端：客户端侧程序。</summary>
+    Player,
+}
+
+/// <summary>分类相关辅助。</summary>
+public static class ProcessCategoryInfo
+{
+    public static string DisplayName(this ProcessCategory category) => category switch
+    {
+        ProcessCategory.Referee => "裁判端",
+        ProcessCategory.Player => "选手端",
+        _ => category.ToString(),
+    };
+
+    public static string Description(this ProcessCategory category) => category switch
+    {
+        ProcessCategory.Referee => "服务 / 引擎侧程序",
+        ProcessCategory.Player => "客户端侧程序",
+        _ => string.Empty,
+    };
+}
+
 /// <summary>单个被监控程序的定义。</summary>
 public sealed class MonitoredProcess
 {
@@ -11,10 +39,14 @@ public sealed class MonitoredProcess
     /// <summary>不含扩展名的进程名，用于与系统进程列表匹配。</summary>
     public string ProcessName { get; }
 
-    public MonitoredProcess(string exeName)
+    /// <summary>所属分类。</summary>
+    public ProcessCategory Category { get; }
+
+    public MonitoredProcess(string exeName, ProcessCategory category)
     {
         ExeName = exeName;
         ProcessName = Path.GetFileNameWithoutExtension(exeName);
+        Category = category;
     }
 }
 
@@ -22,6 +54,7 @@ public sealed class MonitoredProcess
 public sealed class ProcessStatus
 {
     public required string ExeName { get; init; }
+    public ProcessCategory Category { get; init; }
     public bool IsRunning { get; init; }
 
     /// <summary>匹配到的进程实例数量。</summary>
@@ -37,21 +70,26 @@ public sealed class ProcessStatus
 /// </summary>
 public sealed class ProcessMonitor
 {
-    /// <summary>RoboMaster 赛事引擎相关的目标程序清单（顺序即显示顺序）。</summary>
+    /// <summary>
+    /// RoboMaster 赛事引擎相关的目标程序清单（顺序即显示顺序）。
+    /// 已剔除工具类程序（如 RMUploadTool.exe）。
+    /// </summary>
     public static readonly IReadOnlyList<MonitoredProcess> RoboMasterTargets = new[]
     {
-        "AdapterSvrS0.exe",
-        "RMServer.exe",
-        "RMServerLogClient.exe",
-        "RMUploadTool.exe",
-        "RoboMasterEngine.exe",
-        "RMClientDaemon.exe",
-        "RMClientAssist_VideoRecord.exe",
-        "RMClientAssist_MarkRecognition.exe",
-        "RMClientAssist_SerialPort.exe",
-        "RMClientAssist_RemoteSerialPort.exe",
-        "RoboMasterClient.exe",
-    }.Select(n => new MonitoredProcess(n)).ToArray();
+        // ---- 裁判端：服务 / 引擎侧 ----
+        new MonitoredProcess("AdapterSvrS0.exe",      ProcessCategory.Referee),
+        new MonitoredProcess("RMServer.exe",          ProcessCategory.Referee),
+        new MonitoredProcess("RMServerLogClient.exe", ProcessCategory.Referee),
+        new MonitoredProcess("RoboMasterEngine.exe",  ProcessCategory.Referee),
+
+        // ---- 选手端：客户端侧 ----
+        new MonitoredProcess("RMClientDaemon.exe",                  ProcessCategory.Player),
+        new MonitoredProcess("RMClientAssist_VideoRecord.exe",      ProcessCategory.Player),
+        new MonitoredProcess("RMClientAssist_MarkRecognition.exe",  ProcessCategory.Player),
+        new MonitoredProcess("RMClientAssist_SerialPort.exe",       ProcessCategory.Player),
+        new MonitoredProcess("RMClientAssist_RemoteSerialPort.exe", ProcessCategory.Player),
+        new MonitoredProcess("RoboMasterClient.exe",                ProcessCategory.Player),
+    };
 
     private readonly IReadOnlyList<MonitoredProcess> _targets;
 
@@ -114,6 +152,7 @@ public sealed class ProcessMonitor
             result.Add(new ProcessStatus
             {
                 ExeName = target.ExeName,
+                Category = target.Category,
                 IsRunning = count > 0,
                 InstanceCount = count,
                 Pid = pid,

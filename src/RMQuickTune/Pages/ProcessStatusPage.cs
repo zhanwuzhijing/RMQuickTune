@@ -4,7 +4,7 @@ using RMQuickTune.Core;
 namespace RMQuickTune.Pages;
 
 /// <summary>
-/// 主界面：以卡片网格展示 RoboMaster 赛事引擎相关程序的运行状态。
+/// 主界面：按「裁判端 / 选手端」分栏展示相关程序的运行状态。
 /// 定时自动刷新，绿色=运行中，灰色=已停止。
 /// </summary>
 public sealed class ProcessStatusPage : PageBase
@@ -16,8 +16,12 @@ public sealed class ProcessStatusPage : PageBase
     private readonly Label _titleLabel;
     private readonly Label _summaryLabel;
     private readonly RoundButton _refreshBtn;
-    private readonly FlowLayoutPanel _cardArea;
-    private readonly List<ProcessCard> _cards = new();
+
+    private readonly TableLayoutPanel _columns;
+    private readonly List<CategoryColumn> _categoryColumns = new();
+
+    // ExeName -> 卡片，刷新时直接定位
+    private readonly Dictionary<string, ProcessCard> _cardByExe = new(StringComparer.OrdinalIgnoreCase);
 
     public override string DisplayName => "运行状态";
 
@@ -31,7 +35,6 @@ public sealed class ProcessStatusPage : PageBase
             Dock = DockStyle.Top,
             Height = 92,
             BackColor = Theme.ContentBg,
-            Padding = new Padding(28, 20, 28, 0),
         };
 
         _titleLabel = new Label
@@ -63,33 +66,41 @@ public sealed class ProcessStatusPage : PageBase
         _header.Controls.Add(_refreshBtn);
         _header.Resize += (_, _) => PositionRefreshButton();
 
-        // ---- 卡片区（可滚动、自动换行）----
-        _cardArea = new FlowLayoutPanel
+        // ---- 分栏区：每个分类一列 ----
+        var categories = _monitor.Targets
+            .Select(t => t.Category)
+            .Distinct()
+            .ToArray();
+
+        _columns = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            AutoScroll = true,
             BackColor = Theme.ContentBg,
-            Padding = new Padding(22, 4, 22, 22),
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = true,
+            Padding = new Padding(22, 0, 22, 16),
+            ColumnCount = categories.Length,
+            RowCount = 1,
         };
-        _cardArea.Resize += (_, _) => ResizeCards();
+        for (int i = 0; i < categories.Length; i++)
+            _columns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / categories.Length));
+        _columns.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-        foreach (var target in _monitor.Targets)
+        for (int i = 0; i < categories.Length; i++)
         {
-            var card = new ProcessCard(target.ExeName)
-            {
-                Margin = new Padding(6),
-            };
-            _cards.Add(card);
-            _cardArea.Controls.Add(card);
+            var cat = categories[i];
+            var items = _monitor.Targets.Where(t => t.Category == cat).ToArray();
+            var col = new CategoryColumn(cat, items);
+            foreach (var kv in col.Cards)
+                _cardByExe[kv.Key] = kv.Value;
+
+            col.Margin = new Padding(i == 0 ? 0 : 8, 4, i == categories.Length - 1 ? 0 : 8, 0);
+            _categoryColumns.Add(col);
+            _columns.Controls.Add(col, i, 0);
         }
 
-        Controls.Add(_cardArea);
+        Controls.Add(_columns);
         Controls.Add(_header);
 
         PositionRefreshButton();
-        ResizeCards();
 
         _timer = new System.Windows.Forms.Timer { Interval = 2000 };
         _timer.Tick += (_, _) => RefreshStatus();
@@ -100,24 +111,6 @@ public sealed class ProcessStatusPage : PageBase
         _refreshBtn.Location = new Point(
             _header.ClientSize.Width - _refreshBtn.Width - 28,
             (_header.Height - _refreshBtn.Height) / 2 + 4);
-    }
-
-    /// <summary>根据可用宽度让卡片自适应：宽屏两列，窄屏单列。</summary>
-    private void ResizeCards()
-    {
-        int avail = _cardArea.ClientSize.Width - _cardArea.Padding.Horizontal;
-        if (avail <= 0) return;
-
-        // 每列最小约 360px，决定列数（1 或 2）
-        int columns = avail >= 760 ? 2 : 1;
-        int margin = 12; // 每张卡左右 margin 合计
-        int cardWidth = (avail / columns) - margin;
-        if (cardWidth < 280) cardWidth = avail - margin;
-
-        _cardArea.SuspendLayout();
-        foreach (var card in _cards)
-            card.Width = cardWidth;
-        _cardArea.ResumeLayout();
     }
 
     public override void OnActivated()
@@ -132,12 +125,25 @@ public sealed class ProcessStatusPage : PageBase
     {
         var statuses = _monitor.CheckAll();
         int running = 0;
+        var perCategoryRunning = new Dictionary<ProcessCategory, int>();
+        var perCategoryTotal = new Dictionary<ProcessCategory, int>();
 
-        for (int i = 0; i < statuses.Count && i < _cards.Count; i++)
+        foreach (var s in statuses)
         {
-            var s = statuses[i];
+            if (_cardByExe.TryGetValue(s.ExeName, out var card))
+                card.UpdateStatus(s.IsRunning, s.InstanceCount, s.Pid);
+
             if (s.IsRunning) running++;
-            _cards[i].UpdateStatus(s.IsRunning, s.InstanceCount, s.Pid);
+            perCategoryTotal[s.Category] = perCategoryTotal.GetValueOrDefault(s.Category) + 1;
+            if (s.IsRunning)
+                perCategoryRunning[s.Category] = perCategoryRunning.GetValueOrDefault(s.Category) + 1;
+        }
+
+        foreach (var col in _categoryColumns)
+        {
+            int r = perCategoryRunning.GetValueOrDefault(col.Category);
+            int t = perCategoryTotal.GetValueOrDefault(col.Category);
+            col.UpdateSummary(r, t);
         }
 
         bool allUp = running == statuses.Count;

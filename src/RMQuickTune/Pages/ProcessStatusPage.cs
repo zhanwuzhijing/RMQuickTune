@@ -241,13 +241,13 @@ public sealed class ProcessStatusPage : PageBase
             ? "Engine 版本读取失败"
             : $"Engine 版本 {info.Version}";
 
-        // Server 归属部分
+        // Server 版本一致性检查部分
         string serverPart = info.ServerOwnership switch
         {
-            ServerOwnership.Valid => "Server 归属 ✓",
-            ServerOwnership.Mismatch => "Server 归属 ✗ 异常（来自其他目录）",
+            ServerOwnership.Valid => "Server 版本一致性检查 ✓",
+            ServerOwnership.Mismatch => "Server 版本一致性检查 ✗ 异常（来自其他目录）",
             ServerOwnership.NotRunning => "Server 未运行",
-            _ => "Server 归属未知",
+            _ => "Server 版本一致性检查未知",
         };
 
         _engineLabel.Text = $"{versionPart}    ·    {serverPart}";

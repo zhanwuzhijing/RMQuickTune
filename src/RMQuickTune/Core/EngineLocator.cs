@@ -25,6 +25,22 @@ public sealed class EngineInfo
 
     /// <summary>当 Server 归属异常时，记录其实际 exe 路径。</summary>
     public string? ServerActualPath { get; init; }
+
+    /// <summary>版本类型（学生版 / 比赛版），从目录名推导。</summary>
+    public ProductEdition Edition { get; init; } = ProductEdition.Unknown;
+}
+
+/// <summary>产品版本类型。</summary>
+public enum ProductEdition
+{
+    /// <summary>无法判定。</summary>
+    Unknown,
+
+    /// <summary>学生版（目录名含 _Student）。</summary>
+    Student,
+
+    /// <summary>比赛版 / 正式版（Official）。</summary>
+    Official,
 }
 
 /// <summary>RMServer 相对于当前 engine 的归属状态。</summary>
@@ -118,7 +134,22 @@ public static class EngineLocator
             VersionReadFailed = version is null,
             ServerOwnership = ownership,
             ServerActualPath = serverPath,
+            Edition = DetectEdition(engineDir),
         };
+    }
+
+    /// <summary>从目录名推导版本类型：含 "_Student"/"Student" 为学生版，含 "Official" 为比赛版。</summary>
+    public static ProductEdition DetectEdition(string? dir)
+    {
+        if (string.IsNullOrEmpty(dir)) return ProductEdition.Unknown;
+        string name = dir;
+        try { name = new DirectoryInfo(dir).Name; } catch { /* 用原串兜底 */ }
+
+        if (name.Contains("Student", StringComparison.OrdinalIgnoreCase))
+            return ProductEdition.Student;
+        if (name.Contains("Official", StringComparison.OrdinalIgnoreCase))
+            return ProductEdition.Official;
+        return ProductEdition.Unknown;
     }
 
     /// <summary>

@@ -82,33 +82,59 @@ public sealed class CloudAuditResult
 public static class CloudVersionAudit
 {
     /// <summary>
-    /// 赛事类型 -> 各对比项的（显示名, 云端条目名）。
-    /// 云端条目名来自 edu.dji.com API 的 firmware_info[].name。
+    /// 对比项定义：显示名 + 云端条目名 + 本地版本来源类型。
     /// </summary>
-    private static readonly Dictionary<string, (string Label, string CloudName)[]> EventMap = new(StringComparer.OrdinalIgnoreCase)
+    private enum LocalSource { Engine, Client, ServerConfig }
+
+    /// <summary>
+    /// (赛事类型, 版本类型) -> 各对比项。
+    /// 云端条目名来自 edu.dji.com API 的 firmware_info[].name。
+    /// 学生版与比赛版是云端不同的条目，不可混比。
+    /// </summary>
+    private static readonly Dictionary<(string Event, ProductEdition Edition), (string Label, string CloudName, LocalSource Source)[]> EventMap = new()
     {
-        ["RMUC"] = new[]
+        // ---- RMUC 学生版：referee&server(引擎一体) + client ----
+        [("RMUC", ProductEdition.Student)] = new[]
         {
-            ("Engine / 裁判&服务端", "RMUC referee&server"),
-            ("Server（服务器）", "RMUC server"),
-            ("Client（客户端）", "RMUC client"),
+            ("Engine / 裁判&服务端", "RMUC referee&server", LocalSource.Engine),
+            ("选手端（Client）", "RMUC client", LocalSource.Client),
         },
-        ["RMUL_3V3"] = new[]
+        // ---- RMUC 比赛版：server / Official Referee / Official Client 分开 ----
+        [("RMUC", ProductEdition.Official)] = new[]
         {
-            ("Engine / 裁判&服务端", "RMUL 3V3 referee&server"),
-            ("Client（客户端）", "RMUL 3V3 client"),
+            ("裁判端（Referee）", "RMUC Official Referee", LocalSource.Engine),
+            ("服务器（Server）", "RMUC server", LocalSource.ServerConfig),
+            ("选手端（Client）", "RMUC Official Client", LocalSource.Client),
         },
-        ["RMUL_1V1"] = new[]
+
+        // ---- RMUL 各项（均为学生版形态：referee&server + client）----
+        [("RMUL_3V3", ProductEdition.Student)] = new[]
         {
-            ("Engine / 裁判&服务端", "RMUL 1V1 referee&server"),
-            ("Client（客户端）", "RMUL 1V1 client"),
+            ("Engine / 裁判&服务端", "RMUL 3V3 referee&server", LocalSource.Engine),
+            ("选手端（Client）", "RMUL 3V3 client", LocalSource.Client),
         },
-        ["RMUL_ENGINEER"] = new[]
+        [("RMUL_1V1", ProductEdition.Student)] = new[]
         {
-            ("Engine / 裁判&服务端", "RMUL Engineer referee&server"),
-            ("Client（客户端）", "RMUL Engineer client"),
+            ("Engine / 裁判&服务端", "RMUL 1V1 referee&server", LocalSource.Engine),
+            ("选手端（Client）", "RMUL 1V1 client", LocalSource.Client),
+        },
+        [("RMUL_ENGINEER", ProductEdition.Student)] = new[]
+        {
+            ("Engine / 裁判&服务端", "RMUL Engineer referee&server", LocalSource.Engine),
+            ("选手端（Client）", "RMUL Engineer client", LocalSource.Client),
         },
     };
+
+    /// <summary>解析对应的对比项映射。RMUL 暂只有学生版形态，未知版本按学生版兜底。</summary>
+    private static (string Label, string CloudName, LocalSource Source)[]? ResolveMapping(string eventKey, ProductEdition edition)
+    {
+        if (EventMap.TryGetValue((eventKey, edition), out var m))
+            return m;
+        // 兜底：未能判定版本类型时，按学生版处理（赛事现场学生版最常见）
+        if (EventMap.TryGetValue((eventKey, ProductEdition.Student), out var s))
+            return s;
+        return null;
+    }
 
     /// <summary>从 scene 字符串推导赛事类型键。</summary>
     public static string? DeriveEventKey(string? scene)
@@ -154,23 +180,18 @@ public static class CloudVersionAudit
         string? localServer = engine.EngineDir is null ? null : EngineLocator.TryReadServerVersion(engine.EngineDir);
         string? localClient = EngineLocator.TryDetectClientVersion(); // 运行中的选手端
 
-        if (eventKey is not null && EventMap.TryGetValue(eventKey, out var mapping))
+        var mapping = eventKey is null ? null : ResolveMapping(eventKey, engine.Edition);
+        if (mapping is not null)
         {
-            foreach (var (label, cloudName) in mapping)
+            foreach (var (label, cloudName, source) in mapping)
             {
-                // 选定本地版本：
-                //   referee&server -> engine 版本(globalgamemanagers)
-                //   *client        -> 运行中的选手端版本
-                //   *server        -> GameSystemConfig server_version
-                string? local;
-                if (cloudName.Contains("referee", StringComparison.OrdinalIgnoreCase))
-                    local = localEngine;
-                else if (cloudName.EndsWith("client", StringComparison.OrdinalIgnoreCase))
-                    local = localClient;
-                else if (cloudName.EndsWith("server", StringComparison.OrdinalIgnoreCase))
-                    local = localServer;
-                else
-                    local = null;
+                string? local = source switch
+                {
+                    LocalSource.Engine => localEngine,
+                    LocalSource.Client => localClient,
+                    LocalSource.ServerConfig => localServer,
+                    _ => null,
+                };
 
                 string? cloudVer = cloud?.Get(cloudName)?.Version;
 
@@ -187,12 +208,19 @@ public static class CloudVersionAudit
         return new CloudAuditResult
         {
             Items = items,
-            EventType = eventKey is null ? null : EventDisplayName(eventKey),
+            EventType = eventKey is null ? null : EventDisplayName(eventKey) + EditionSuffix(engine.Edition),
             CloudFetchedAt = cloud?.FetchedAt,
             CloudFromCache = cloud?.FromCache ?? false,
             HasCloudData = cloud is not null,
         };
     }
+
+    private static string EditionSuffix(ProductEdition edition) => edition switch
+    {
+        ProductEdition.Student => " · 学生版",
+        ProductEdition.Official => " · 比赛版",
+        _ => "",
+    };
 
     private static CompareResult Compare(string? local, string? cloud)
     {

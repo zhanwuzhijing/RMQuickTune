@@ -24,7 +24,6 @@ public sealed class MainForm : Form
         MinimumSize = new Size(960, 600);
         ClientSize = new Size(1280, 800);
         StartPosition = FormStartPosition.CenterScreen;
-        WindowState = FormWindowState.Maximized;
         Font = new Font(Theme.FontFamily, 9F);
         BackColor = Theme.ContentBg;
         DoubleBuffered = true;

@@ -10,9 +10,8 @@ public sealed class CategoryColumn : Panel
 {
     private readonly ProcessCategory _category;
     private readonly Label _titleLabel;
-    private readonly Label _descLabel;
     private readonly CountBadge _countBadge;
-    private readonly TableLayoutPanel _cardArea;
+    private readonly FlowLayoutPanel _cardArea;
 
     /// <summary>该栏内 ExeName -> 卡片 的映射。</summary>
     public IReadOnlyDictionary<string, ProcessCard> Cards { get; }
@@ -49,16 +48,7 @@ public sealed class CategoryColumn : Panel
             Font = new Font(Theme.FontFamily, 13F, FontStyle.Bold),
             ForeColor = Theme.TitleText,
             AutoSize = true,
-            Location = new Point(32, 14),
-        };
-
-        _descLabel = new Label
-        {
-            Text = category.Description(),
-            Font = new Font(Theme.FontFamily, 8.5F),
-            ForeColor = Theme.SubtleText,
-            AutoSize = true,
-            Location = new Point(34, 40),
+            Location = new Point(32, 20),
         };
 
         _countBadge = new CountBadge
@@ -69,7 +59,6 @@ public sealed class CategoryColumn : Panel
 
         headerBar.Controls.Add(accentBar);
         headerBar.Controls.Add(_titleLabel);
-        headerBar.Controls.Add(_descLabel);
         headerBar.Controls.Add(_countBadge);
         headerBar.Resize += (_, _) =>
             _countBadge.Location = new Point(headerBar.Width - _countBadge.Width - 18, 19);
@@ -82,35 +71,45 @@ public sealed class CategoryColumn : Panel
             BackColor = Theme.CardBorder,
         };
 
-        // ---- 卡片列表：每行一个卡片，行高均分填满整列 ----
-        _cardArea = new TableLayoutPanel
+        // ---- 卡片列表：固定高度的卡片自上而下排列，可滚动 ----
+        _cardArea = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
             BackColor = Theme.CardBg,
             Padding = new Padding(14, 12, 14, 14),
-            ColumnCount = 1,
-            RowCount = items.Count,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoScroll = true,
         };
-        _cardArea.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        for (int r = 0; r < items.Count; r++)
-            _cardArea.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / Math.Max(1, items.Count)));
 
         var cards = new Dictionary<string, ProcessCard>(StringComparer.OrdinalIgnoreCase);
-        for (int r = 0; r < items.Count; r++)
+        foreach (var item in items)
         {
-            var card = new ProcessCard(items[r].ExeName)
+            var card = new ProcessCard(item.ExeName)
             {
-                Dock = DockStyle.Fill,
-                Margin = new Padding(0, r == 0 ? 0 : 5, 0, 5),
+                Height = 58,
+                Margin = new Padding(0, 0, 0, 8),
             };
-            cards[items[r].ExeName] = card;
-            _cardArea.Controls.Add(card, 0, r);
+            cards[item.ExeName] = card;
+            _cardArea.Controls.Add(card);
         }
         Cards = cards;
+
+        _cardArea.Resize += (_, _) => ResizeCards();
 
         Controls.Add(_cardArea);
         Controls.Add(divider);
         Controls.Add(headerBar);
+
+        ResizeCards();
+    }
+
+    private void ResizeCards()
+    {
+        int w = _cardArea.ClientSize.Width - _cardArea.Padding.Horizontal;
+        if (w <= 0) return;
+        foreach (ProcessCard card in _cardArea.Controls)
+            card.Width = w;
     }
 
     public void UpdateSummary(int running, int total)

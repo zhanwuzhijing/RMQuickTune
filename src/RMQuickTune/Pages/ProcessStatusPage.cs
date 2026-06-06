@@ -153,11 +153,26 @@ public sealed class ProcessStatusPage : PageBase
         RefreshStatus();
         _timer.Start();
 
-        // 先用磁盘缓存即时显示，再异步拉取最新
+        // 先用磁盘缓存即时显示
         var cached = _cloudChecker.LoadCacheToMemory();
         if (cached is not null)
             UpdateCloudInfo(cached);
-        _ = RefreshCloudAsync();
+
+        // 异步拉取最新。确保在控件句柄就绪后再发起，
+        // 否则 await 续体无法 marshal 回 UI 线程（会出现“需点一次刷新才显示”）。
+        if (IsHandleCreated)
+        {
+            _ = RefreshCloudAsync();
+        }
+        else
+        {
+            void OnHandle(object? s, EventArgs e)
+            {
+                HandleCreated -= OnHandle;
+                _ = RefreshCloudAsync();
+            }
+            HandleCreated += OnHandle;
+        }
     }
 
     public override void OnDeactivated() => _timer.Stop();
@@ -331,6 +346,15 @@ public sealed class ProcessStatusPage : PageBase
     private void UpdateCloudInfo(CloudVersionData? cloud)
     {
         if (IsDisposed || Disposing) return;
+
+        // 异步 await 之后的续体可能不在 UI 线程上（尤其首次在窗体构造期触发时），
+        // 这里统一 marshal 回 UI 线程，避免更新被静默丢弃导致“要点一次刷新才显示”。
+        if (InvokeRequired)
+        {
+            try { BeginInvoke(new Action(() => UpdateCloudInfo(cloud))); }
+            catch { /* 句柄未就绪/已销毁，忽略 */ }
+            return;
+        }
 
         var engine = _lastEngineInfo;
 

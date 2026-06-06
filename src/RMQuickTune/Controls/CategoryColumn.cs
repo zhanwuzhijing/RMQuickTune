@@ -88,8 +88,8 @@ public sealed class CategoryColumn : Panel
             AutoScroll = true,
             BackColor = Theme.CardBg,
             Padding = new Padding(14, 12, 14, 14),
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
         };
 
         var cards = new Dictionary<string, ProcessCard>(StringComparer.OrdinalIgnoreCase);
@@ -97,7 +97,7 @@ public sealed class CategoryColumn : Panel
         {
             var card = new ProcessCard(item.ExeName)
             {
-                Margin = new Padding(0, 0, 0, 10),
+                Margin = new Padding(0, 0, 12, 12),
             };
             cards[item.ExeName] = card;
             _cardArea.Controls.Add(card);
@@ -115,10 +115,22 @@ public sealed class CategoryColumn : Panel
 
     private void ResizeCards()
     {
-        int w = _cardArea.ClientSize.Width - _cardArea.Padding.Horizontal;
-        if (w <= 0) return;
+        // 预留垂直滚动条宽度，避免触发水平滚动条
+        int avail = _cardArea.ClientSize.Width - _cardArea.Padding.Horizontal;
+        if (avail <= 0) return;
+
+        const int gap = 12;            // 卡片右侧 margin
+        const int minCardWidth = 300;  // 单卡最小宽度
+
+        // 计算能放下几列（至少 1 列）
+        int columns = Math.Max(1, (avail + gap) / (minCardWidth + gap));
+        int cardWidth = (avail - gap * (columns - 1)) / columns;
+        if (cardWidth < 1) cardWidth = avail;
+
+        _cardArea.SuspendLayout();
         foreach (ProcessCard card in _cardArea.Controls)
-            card.Width = w;
+            card.Width = cardWidth;
+        _cardArea.ResumeLayout();
     }
 
     public void UpdateSummary(int running, int total)

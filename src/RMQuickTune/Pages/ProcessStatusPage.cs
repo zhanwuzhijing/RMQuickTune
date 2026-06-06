@@ -150,29 +150,14 @@ public sealed class ProcessStatusPage : PageBase
 
     public override void OnActivated()
     {
-        RefreshStatus();
+        // 先把磁盘缓存加载进内存，这样首次刷新就能直接用缓存做比较
+        _cloudChecker.LoadCacheToMemory();
+
+        RefreshStatus();   // 内部会用 _cloudChecker.Current 渲染云端校验
         _timer.Start();
 
-        // 先用磁盘缓存即时显示
-        var cached = _cloudChecker.LoadCacheToMemory();
-        if (cached is not null)
-            UpdateCloudInfo(cached);
-
-        // 异步拉取最新。确保在控件句柄就绪后再发起，
-        // 否则 await 续体无法 marshal 回 UI 线程（会出现“需点一次刷新才显示”）。
-        if (IsHandleCreated)
-        {
-            _ = RefreshCloudAsync();
-        }
-        else
-        {
-            void OnHandle(object? s, EventArgs e)
-            {
-                HandleCreated -= OnHandle;
-                _ = RefreshCloudAsync();
-            }
-            HandleCreated += OnHandle;
-        }
+        // 打开软件自动从云端拉一次最新；拉到后，定时刷新会自动用上（无需手动点刷新）
+        _ = RefreshCloudAsync();
     }
 
     public override void OnDeactivated() => _timer.Stop();
@@ -256,6 +241,10 @@ public sealed class ProcessStatusPage : PageBase
         _summaryLabel.ForeColor = allUp ? Theme.Running : Theme.SubtleText;
 
         UpdateEngineInfo();
+
+        // 用内存中已有的云端数据（缓存或上次拉取）持续渲染比较结果。
+        // 始终在 UI 线程执行（定时器/手动刷新均如此），不依赖异步拉取的线程时序。
+        UpdateCloudInfo(_cloudChecker.Current);
     }
 
     /// <summary>检测并展示 Engine 版本与 Server 归属校验结果。</summary>
@@ -315,31 +304,40 @@ public sealed class ProcessStatusPage : PageBase
             _engineTip.SetToolTip(_engineLabel, string.Empty);
     }
 
-    /// <summary>异步拉取云端版本并刷新对比展示。</summary>
+    /// <summary>异步从云端拉取最新版本数据。拉取成功后写入内存/缓存；
+    /// 界面渲染由定时刷新（RefreshStatus -> UpdateCloudInfo）统一负责，
+    /// 因此这里只需触发一次即时刷新，不直接更新控件，避免线程时序问题。</summary>
     private async Task RefreshCloudAsync()
     {
         if (_cloudFetching) return;
         _cloudFetching = true;
         try
         {
-            // 仅在已有数据时提示“更新中”，避免覆盖缓存显示
+            // 无任何数据时提示“获取中”（有缓存则继续显示缓存比较结果）
             if (_cloudChecker.Current is null)
             {
                 _cloudLabel.Text = "云端版本校验：正在获取云端数据…";
                 _cloudLabel.ForeColor = Theme.SubtleText;
             }
 
-            var data = await _cloudChecker.RefreshAsync().ConfigureAwait(true);
-            UpdateCloudInfo(data);
+            await _cloudChecker.RefreshAsync().ConfigureAwait(true);
         }
         catch
         {
-            // 忽略，UpdateCloudInfo 已处理 null
+            // 忽略：失败时 _cloudChecker.Current 仍是上次/缓存数据
         }
         finally
         {
             _cloudFetching = false;
         }
+
+        // 拉取结束后即时刷新一次界面（marshal 回 UI 线程）
+        try
+        {
+            if (IsHandleCreated && !IsDisposed)
+                BeginInvoke(new Action(() => UpdateCloudInfo(_cloudChecker.Current)));
+        }
+        catch { /* 句柄未就绪/已销毁，定时刷新会兜底 */ }
     }
 
     /// <summary>根据云端数据与本地 engine 信息，渲染云端校验结果与最后更新时间。</summary>

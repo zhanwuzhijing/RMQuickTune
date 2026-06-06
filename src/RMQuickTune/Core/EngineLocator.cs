@@ -51,17 +51,33 @@ public static class EngineLocator
 {
     private const string EngineProcessName = "RoboMasterEngine";
     private const string ServerProcessName = "RMServer";
+    private const string ClientProcessName = "RoboMasterClient";
 
     // engine 目录下到 RMServer 根目录的相对路径
     private static readonly string ServerRelativeRoot =
         Path.Combine("RoboMasterEngine_Data", "StreamingAssets", "RMServer");
 
-    // globalgamemanagers 相对路径
-    private static readonly string GgmRelativePath =
-        Path.Combine("RoboMasterEngine_Data", "globalgamemanagers");
-
     // 四段式版本号
     private static readonly Regex VersionRegex = new(@"^\d+\.\d+\.\d+\.\d+$", RegexOptions.Compiled);
+
+    /// <summary>
+    /// 检测正在运行的选手端 RoboMasterClient 的版本号。
+    /// 目录定位：运行中的 RoboMasterClient.exe 所在目录；
+    /// 版本来源：{exe目录}\RoboMasterClient_Data\globalgamemanagers。
+    /// 未运行返回 null。
+    /// </summary>
+    public static string? TryDetectClientVersion()
+    {
+        string? clientExe = TryGetRunningProcessPath(ClientProcessName);
+        if (clientExe is null) return null;
+
+        string? clientDir;
+        try { clientDir = Path.GetDirectoryName(clientExe); }
+        catch { return null; }
+        if (string.IsNullOrEmpty(clientDir)) return null;
+
+        return TryReadUnityVersion(clientDir, "RoboMasterClient_Data", ClientProcessName);
+    }
 
     /// <summary>执行完整检测：定位 engine、读版本、校验 server 归属。</summary>
     public static EngineInfo Detect()
@@ -111,10 +127,18 @@ public static class EngineLocator
     /// 取产品名之后第一个匹配四段式格式的 ASCII 字符串。
     /// </summary>
     public static string? TryReadVersion(string engineDir)
+        => TryReadUnityVersion(engineDir, "RoboMasterEngine_Data", EngineProcessName);
+
+    /// <summary>
+    /// 通用 Unity 应用版本读取：从 {appDir}\{dataFolder}\globalgamemanagers 中，
+    /// 取产品名 productName 之后第一个四段式版本号。
+    /// 与 engine/client 共用同一结构。
+    /// </summary>
+    public static string? TryReadUnityVersion(string appDir, string dataFolder, string productName)
     {
         try
         {
-            string ggm = Path.Combine(engineDir, GgmRelativePath);
+            string ggm = Path.Combine(appDir, dataFolder, "globalgamemanagers");
             if (!File.Exists(ggm))
                 return null;
 
@@ -122,7 +146,7 @@ public static class EngineLocator
             var strings = ExtractAsciiStrings(bytes, minLength: 3);
 
             int productIdx = strings.FindIndex(
-                s => string.Equals(s, EngineProcessName, StringComparison.Ordinal));
+                s => string.Equals(s, productName, StringComparison.Ordinal));
             if (productIdx < 0)
                 return null;
 

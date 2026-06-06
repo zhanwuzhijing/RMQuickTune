@@ -121,17 +121,25 @@ public static class CloudVersionAudit
         // 本地版本来源
         string? localEngine = engine.Version; // globalgamemanagers
         string? localServer = engine.EngineDir is null ? null : EngineLocator.TryReadServerVersion(engine.EngineDir);
+        string? localClient = EngineLocator.TryDetectClientVersion(); // 运行中的选手端
 
         if (eventKey is not null && EventMap.TryGetValue(eventKey, out var mapping))
         {
             foreach (var (label, cloudName) in mapping)
             {
-                // 选定本地版本：referee&server 与 engine 比对；server 项与 GameSystemConfig server_version 比对
-                string? local = cloudName.Contains("referee", StringComparison.OrdinalIgnoreCase)
-                    ? localEngine
-                    : cloudName.EndsWith("server", StringComparison.OrdinalIgnoreCase)
-                        ? localServer
-                        : null; // client 本地暂无可靠来源
+                // 选定本地版本：
+                //   referee&server -> engine 版本(globalgamemanagers)
+                //   *client        -> 运行中的选手端版本
+                //   *server        -> GameSystemConfig server_version
+                string? local;
+                if (cloudName.Contains("referee", StringComparison.OrdinalIgnoreCase))
+                    local = localEngine;
+                else if (cloudName.EndsWith("client", StringComparison.OrdinalIgnoreCase))
+                    local = localClient;
+                else if (cloudName.EndsWith("server", StringComparison.OrdinalIgnoreCase))
+                    local = localServer;
+                else
+                    local = null;
 
                 string? cloudVer = cloud?.Get(cloudName)?.Version;
 

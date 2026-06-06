@@ -24,6 +24,7 @@ public sealed class CategoryColumn : Panel
         _category = category;
         BackColor = Theme.CardBg;
         Padding = new Padding(1);
+        Dock = DockStyle.Fill;
 
         // ---- 标题行 ----
         var headerBar = new Panel

@@ -15,6 +15,8 @@ public sealed class ProcessStatusPage : PageBase
     private readonly Panel _header;
     private readonly Label _titleLabel;
     private readonly Label _summaryLabel;
+    private readonly Label _engineLabel;
+    private readonly ToolTip _engineTip = new();
     private readonly RoundButton _refreshBtn;
 
     private readonly TableLayoutPanel _columns;
@@ -33,7 +35,7 @@ public sealed class ProcessStatusPage : PageBase
         _header = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 92,
+            Height = 112,
             BackColor = Theme.ContentBg,
         };
 
@@ -55,6 +57,15 @@ public sealed class ProcessStatusPage : PageBase
             Location = new Point(30, 54),
         };
 
+        _engineLabel = new Label
+        {
+            Text = "Engine 检测中…",
+            Font = Theme.PageSubtitle,
+            ForeColor = Theme.SubtleText,
+            AutoSize = true,
+            Location = new Point(30, 78),
+        };
+
         _refreshBtn = new RoundButton("立即刷新")
         {
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
@@ -63,6 +74,7 @@ public sealed class ProcessStatusPage : PageBase
 
         _header.Controls.Add(_titleLabel);
         _header.Controls.Add(_summaryLabel);
+        _header.Controls.Add(_engineLabel);
         _header.Controls.Add(_refreshBtn);
         _header.Resize += (_, _) => PositionRefreshButton();
 
@@ -199,6 +211,62 @@ public sealed class ProcessStatusPage : PageBase
         _summaryLabel.Text =
             $"运行中 {running} / {statuses.Count}      最后刷新 {DateTime.Now:HH:mm:ss}";
         _summaryLabel.ForeColor = allUp ? Theme.Running : Theme.SubtleText;
+
+        UpdateEngineInfo();
+    }
+
+    /// <summary>检测并展示 Engine 版本与 Server 归属校验结果。</summary>
+    private void UpdateEngineInfo()
+    {
+        EngineInfo info;
+        try { info = EngineLocator.Detect(); }
+        catch
+        {
+            _engineLabel.Text = "Engine 检测失败";
+            _engineLabel.ForeColor = Theme.SubtleText;
+            _engineTip.SetToolTip(_engineLabel, string.Empty);
+            return;
+        }
+
+        if (!info.EngineRunning)
+        {
+            _engineLabel.Text = "Engine 未运行，无法检测版本";
+            _engineLabel.ForeColor = Theme.SubtleText;
+            _engineTip.SetToolTip(_engineLabel, string.Empty);
+            return;
+        }
+
+        // Engine 运行中：版本部分
+        string versionPart = info.VersionReadFailed || string.IsNullOrEmpty(info.Version)
+            ? "Engine 版本读取失败"
+            : $"Engine 版本 {info.Version}";
+
+        // Server 归属部分
+        string serverPart = info.ServerOwnership switch
+        {
+            ServerOwnership.Valid => "Server 归属 ✓",
+            ServerOwnership.Mismatch => "Server 归属 ✗ 异常（来自其他目录）",
+            ServerOwnership.NotRunning => "Server 未运行",
+            _ => "Server 归属未知",
+        };
+
+        _engineLabel.Text = $"{versionPart}    ·    {serverPart}";
+
+        // 颜色：归属异常或版本失败时偏红/灰，正常时绿
+        _engineLabel.ForeColor = info.ServerOwnership switch
+        {
+            ServerOwnership.Valid when !info.VersionReadFailed => Theme.Running,
+            ServerOwnership.Mismatch => Theme.Danger,
+            _ => Theme.SubtleText,
+        };
+
+        // 异常时用 tooltip 展示实际路径
+        if (info.ServerOwnership == ServerOwnership.Mismatch && !string.IsNullOrEmpty(info.ServerActualPath))
+            _engineTip.SetToolTip(_engineLabel, $"运行中的 RMServer 实际路径：\n{info.ServerActualPath}");
+        else if (!string.IsNullOrEmpty(info.EngineDir))
+            _engineTip.SetToolTip(_engineLabel, $"Engine 目录：\n{info.EngineDir}");
+        else
+            _engineTip.SetToolTip(_engineLabel, string.Empty);
     }
 
     protected override void Dispose(bool disposing)
@@ -207,6 +275,7 @@ public sealed class ProcessStatusPage : PageBase
         {
             _timer?.Stop();
             _timer?.Dispose();
+            _engineTip?.Dispose();
         }
         base.Dispose(disposing);
     }

@@ -12,12 +12,20 @@ public sealed class ProcessStatusPage : PageBase
     private readonly ProcessMonitor _monitor = new();
     private readonly System.Windows.Forms.Timer _timer;
 
+    private readonly CloudVersionChecker _cloudChecker = new();
+
     private readonly Panel _header;
     private readonly Label _titleLabel;
     private readonly Label _summaryLabel;
     private readonly Label _engineLabel;
+    private readonly Label _cloudLabel;
     private readonly ToolTip _engineTip = new();
+    private readonly ToolTip _cloudTip = new();
     private readonly RoundButton _refreshBtn;
+
+    // 最近一次本地检测结果，供云端对比复用，避免重复调用 Detect()
+    private EngineInfo? _lastEngineInfo;
+    private bool _cloudFetching;
 
     private readonly TableLayoutPanel _columns;
     private readonly List<CategoryColumn> _categoryColumns = new();
@@ -35,7 +43,7 @@ public sealed class ProcessStatusPage : PageBase
         _header = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 112,
+            Height = 136,
             BackColor = Theme.ContentBg,
         };
 
@@ -66,15 +74,29 @@ public sealed class ProcessStatusPage : PageBase
             Location = new Point(30, 78),
         };
 
+        _cloudLabel = new Label
+        {
+            Text = "云端版本校验：等待检测…",
+            Font = Theme.PageSubtitle,
+            ForeColor = Theme.SubtleText,
+            AutoSize = true,
+            Location = new Point(30, 102),
+        };
+
         _refreshBtn = new RoundButton("立即刷新")
         {
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
         };
-        _refreshBtn.Click += (_, _) => RefreshStatus();
+        _refreshBtn.Click += (_, _) =>
+        {
+            RefreshStatus();
+            _ = RefreshCloudAsync(); // 手动刷新时重新请求云端
+        };
 
         _header.Controls.Add(_titleLabel);
         _header.Controls.Add(_summaryLabel);
         _header.Controls.Add(_engineLabel);
+        _header.Controls.Add(_cloudLabel);
         _header.Controls.Add(_refreshBtn);
         _header.Resize += (_, _) => PositionRefreshButton();
 
@@ -130,6 +152,12 @@ public sealed class ProcessStatusPage : PageBase
     {
         RefreshStatus();
         _timer.Start();
+
+        // 先用磁盘缓存即时显示，再异步拉取最新
+        var cached = _cloudChecker.LoadCacheToMemory();
+        if (cached is not null)
+            UpdateCloudInfo(cached);
+        _ = RefreshCloudAsync();
     }
 
     public override void OnDeactivated() => _timer.Stop();
@@ -222,11 +250,14 @@ public sealed class ProcessStatusPage : PageBase
         try { info = EngineLocator.Detect(); }
         catch
         {
+            _lastEngineInfo = null;
             _engineLabel.Text = "Engine 检测失败";
             _engineLabel.ForeColor = Theme.SubtleText;
             _engineTip.SetToolTip(_engineLabel, string.Empty);
             return;
         }
+
+        _lastEngineInfo = info;
 
         if (!info.EngineRunning)
         {
@@ -269,6 +300,120 @@ public sealed class ProcessStatusPage : PageBase
             _engineTip.SetToolTip(_engineLabel, string.Empty);
     }
 
+    /// <summary>异步拉取云端版本并刷新对比展示。</summary>
+    private async Task RefreshCloudAsync()
+    {
+        if (_cloudFetching) return;
+        _cloudFetching = true;
+        try
+        {
+            // 仅在已有数据时提示“更新中”，避免覆盖缓存显示
+            if (_cloudChecker.Current is null)
+            {
+                _cloudLabel.Text = "云端版本校验：正在获取云端数据…";
+                _cloudLabel.ForeColor = Theme.SubtleText;
+            }
+
+            var data = await _cloudChecker.RefreshAsync().ConfigureAwait(true);
+            UpdateCloudInfo(data);
+        }
+        catch
+        {
+            // 忽略，UpdateCloudInfo 已处理 null
+        }
+        finally
+        {
+            _cloudFetching = false;
+        }
+    }
+
+    /// <summary>根据云端数据与本地 engine 信息，渲染云端校验结果与最后更新时间。</summary>
+    private void UpdateCloudInfo(CloudVersionData? cloud)
+    {
+        if (IsDisposed || Disposing) return;
+
+        var engine = _lastEngineInfo;
+
+        if (engine is null || !engine.EngineRunning)
+        {
+            _cloudLabel.Text = "云端版本校验：Engine 未运行，无法对比";
+            _cloudLabel.ForeColor = Theme.SubtleText;
+            _cloudTip.SetToolTip(_cloudLabel, string.Empty);
+            return;
+        }
+
+        if (cloud is null)
+        {
+            _cloudLabel.Text = "云端版本校验：无法获取云端数据（请检查网络）";
+            _cloudLabel.ForeColor = Theme.Danger;
+            _cloudTip.SetToolTip(_cloudLabel, string.Empty);
+            return;
+        }
+
+        var audit = CloudVersionAudit.Build(engine, cloud);
+
+        // 时间标记
+        string timeTag = $"更新于 {cloud.FetchedAt:MM-dd HH:mm}" + (cloud.FromCache ? "（缓存）" : "");
+
+        if (audit.Items.Count == 0)
+        {
+            string ev = audit.EventType is null ? "未能识别赛事类型" : audit.EventType;
+            _cloudLabel.Text = $"云端版本校验：{ev}，无可对比项    ·    {timeTag}";
+            _cloudLabel.ForeColor = Theme.SubtleText;
+            _cloudTip.SetToolTip(_cloudLabel, BuildCloudTooltip(audit));
+            return;
+        }
+
+        int match = audit.Items.Count(i => i.Result == CompareResult.Match);
+        int mismatch = audit.Items.Count(i => i.Result == CompareResult.Mismatch);
+        int total = audit.Items.Count;
+
+        string evName = audit.EventType ?? "未知赛事";
+        string summary;
+        Color color;
+        if (mismatch > 0)
+        {
+            summary = $"云端版本校验[{evName}]：✗ {mismatch} 项不一致 / 共 {total} 项";
+            color = Theme.Danger;
+        }
+        else if (match == total)
+        {
+            summary = $"云端版本校验[{evName}]：✓ 全部一致（{total} 项）";
+            color = Theme.Running;
+        }
+        else
+        {
+            summary = $"云端版本校验[{evName}]：{match}/{total} 项已对比";
+            color = Theme.SubtleText;
+        }
+
+        _cloudLabel.Text = $"{summary}    ·    {timeTag}";
+        _cloudLabel.ForeColor = color;
+        _cloudTip.SetToolTip(_cloudLabel, BuildCloudTooltip(audit));
+    }
+
+    private static string BuildCloudTooltip(CloudAuditResult audit)
+    {
+        var lines = new List<string>();
+        if (audit.EventType is not null)
+            lines.Add($"赛事类型：{audit.EventType}");
+        foreach (var i in audit.Items)
+        {
+            string mark = i.Result switch
+            {
+                CompareResult.Match => "✓",
+                CompareResult.Mismatch => "✗",
+                _ => "—",
+            };
+            string local = string.IsNullOrEmpty(i.LocalVersion) ? "（无）" : i.LocalVersion;
+            string cloud = string.IsNullOrEmpty(i.CloudVersion) ? "（无）" : i.CloudVersion;
+            lines.Add($"{mark} {i.Label}：本地 {local} | 云端 {cloud}");
+        }
+        if (audit.CloudFetchedAt is not null)
+            lines.Add($"云端数据时间：{audit.CloudFetchedAt:yyyy-MM-dd HH:mm:ss}" + (audit.CloudFromCache ? "（缓存）" : ""));
+        return string.Join("\n", lines);
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)
@@ -276,6 +421,7 @@ public sealed class ProcessStatusPage : PageBase
             _timer?.Stop();
             _timer?.Dispose();
             _engineTip?.Dispose();
+            _cloudTip?.Dispose();
         }
         base.Dispose(disposing);
     }

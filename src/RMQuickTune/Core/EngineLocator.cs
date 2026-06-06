@@ -139,6 +139,38 @@ public static class EngineLocator
         }
     }
 
+    // GameSystemConfig.xml 相对路径
+    private static readonly string GameSystemConfigRelative =
+        Path.Combine("RoboMasterEngine_Data", "StreamingAssets", "RMServer", "Server", "GameSystemConfig.xml");
+
+    /// <summary>读取 GameSystemConfig.xml 中某个节点的 value 属性（节点名 = 配置项名）。</summary>
+    public static string? TryReadGameSystemConfig(string engineDir, string nodeName)
+    {
+        try
+        {
+            string cfg = Path.Combine(engineDir, GameSystemConfigRelative);
+            if (!File.Exists(cfg)) return null;
+
+            var xml = new System.Xml.XmlDocument();
+            xml.Load(cfg);
+            var node = xml.SelectSingleNode($"/root/{nodeName}");
+            string? val = node?.Attributes?["value"]?.Value;
+            return string.IsNullOrWhiteSpace(val) ? null : val.Trim();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>读取场景标识（如 S0Scene2026_RMUC）。</summary>
+    public static string? TryReadScene(string engineDir)
+        => TryReadGameSystemConfig(engineDir, "scene");
+
+    /// <summary>读取配置的 server 版本号（GameSystemConfig.xml server_version）。</summary>
+    public static string? TryReadServerVersion(string engineDir)
+        => TryReadGameSystemConfig(engineDir, "server_version");
+
     /// <summary>校验正在运行的 RMServer.exe 是否位于 engine 目录树下。</summary>
     private static (ServerOwnership, string?) ValidateServer(string engineDir)
     {

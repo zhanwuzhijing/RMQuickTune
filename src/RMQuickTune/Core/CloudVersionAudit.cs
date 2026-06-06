@@ -1,0 +1,166 @@
+namespace RMQuickTune.Core;
+
+/// <summary>单项版本对比结果。</summary>
+public sealed class VersionCompareItem
+{
+    /// <summary>显示名，如 "Engine / 裁判&服务端"。</summary>
+    public required string Label { get; init; }
+
+    /// <summary>本地版本号（可能为 null = 读取失败）。</summary>
+    public string? LocalVersion { get; init; }
+
+    /// <summary>云端版本号（可能为 null = 云端无此项或未获取）。</summary>
+    public string? CloudVersion { get; init; }
+
+    /// <summary>对比结论。</summary>
+    public CompareResult Result { get; init; }
+}
+
+public enum CompareResult
+{
+    /// <summary>本地与云端一致。</summary>
+    Match,
+    /// <summary>本地与云端不一致。</summary>
+    Mismatch,
+    /// <summary>缺少本地或云端数据，无法对比。</summary>
+    Unknown,
+}
+
+/// <summary>整体云端校验结果。</summary>
+public sealed class CloudAuditResult
+{
+    public required IReadOnlyList<VersionCompareItem> Items { get; init; }
+
+    /// <summary>推导出的赛事类型显示名（如 RMUC）。无法推导时为 null。</summary>
+    public string? EventType { get; init; }
+
+    /// <summary>云端数据抓取时间。</summary>
+    public DateTime? CloudFetchedAt { get; init; }
+
+    /// <summary>云端数据是否来自缓存。</summary>
+    public bool CloudFromCache { get; init; }
+
+    /// <summary>是否拿到了云端数据。</summary>
+    public bool HasCloudData { get; init; }
+}
+
+/// <summary>
+/// 将本地多项版本与云端对比。
+/// 赛事类型从 GameSystemConfig.xml 的 scene 字段自动推导，映射到云端固件条目名。
+/// </summary>
+public static class CloudVersionAudit
+{
+    /// <summary>
+    /// 赛事类型 -> 各对比项的（显示名, 云端条目名）。
+    /// 云端条目名来自 edu.dji.com API 的 firmware_info[].name。
+    /// </summary>
+    private static readonly Dictionary<string, (string Label, string CloudName)[]> EventMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["RMUC"] = new[]
+        {
+            ("Engine / 裁判&服务端", "RMUC referee&server"),
+            ("Server（服务器）", "RMUC server"),
+            ("Client（客户端）", "RMUC client"),
+        },
+        ["RMUL_3V3"] = new[]
+        {
+            ("Engine / 裁判&服务端", "RMUL 3V3 referee&server"),
+            ("Client（客户端）", "RMUL 3V3 client"),
+        },
+        ["RMUL_1V1"] = new[]
+        {
+            ("Engine / 裁判&服务端", "RMUL 1V1 referee&server"),
+            ("Client（客户端）", "RMUL 1V1 client"),
+        },
+        ["RMUL_ENGINEER"] = new[]
+        {
+            ("Engine / 裁判&服务端", "RMUL Engineer referee&server"),
+            ("Client（客户端）", "RMUL Engineer client"),
+        },
+    };
+
+    /// <summary>从 scene 字符串推导赛事类型键。</summary>
+    public static string? DeriveEventKey(string? scene)
+    {
+        if (string.IsNullOrEmpty(scene)) return null;
+        string s = scene.ToUpperInvariant();
+
+        // 顺序敏感：先判更具体的 RMUL 细分
+        if (s.Contains("RMUL"))
+        {
+            if (s.Contains("3V3")) return "RMUL_3V3";
+            if (s.Contains("1V1")) return "RMUL_1V1";
+            if (s.Contains("ENGINEER") || s.Contains("ENG")) return "RMUL_ENGINEER";
+            return "RMUL_3V3"; // 默认 3V3
+        }
+        if (s.Contains("RMUC") || s.Contains("RMU")) return "RMUC";
+        return null;
+    }
+
+    /// <summary>赛事类型键的友好显示名。</summary>
+    public static string EventDisplayName(string eventKey) => eventKey switch
+    {
+        "RMUC" => "RMUC（超级对抗赛）",
+        "RMUL_3V3" => "RMUL 3V3（联盟赛 3V3）",
+        "RMUL_1V1" => "RMUL 1V1（联盟赛 1V1）",
+        "RMUL_ENGINEER" => "RMUL 工程（联盟赛工程）",
+        _ => eventKey,
+    };
+
+    /// <summary>
+    /// 执行对比。需要：运行中的 engine 信息（本地版本来源）、云端数据。
+    /// </summary>
+    public static CloudAuditResult Build(EngineInfo engine, CloudVersionData? cloud)
+    {
+        var items = new List<VersionCompareItem>();
+
+        // 推导赛事类型
+        string? scene = engine.EngineDir is null ? null : EngineLocator.TryReadScene(engine.EngineDir);
+        string? eventKey = DeriveEventKey(scene);
+
+        // 本地版本来源
+        string? localEngine = engine.Version; // globalgamemanagers
+        string? localServer = engine.EngineDir is null ? null : EngineLocator.TryReadServerVersion(engine.EngineDir);
+
+        if (eventKey is not null && EventMap.TryGetValue(eventKey, out var mapping))
+        {
+            foreach (var (label, cloudName) in mapping)
+            {
+                // 选定本地版本：referee&server 与 engine 比对；server 项与 GameSystemConfig server_version 比对
+                string? local = cloudName.Contains("referee", StringComparison.OrdinalIgnoreCase)
+                    ? localEngine
+                    : cloudName.EndsWith("server", StringComparison.OrdinalIgnoreCase)
+                        ? localServer
+                        : null; // client 本地暂无可靠来源
+
+                string? cloudVer = cloud?.Get(cloudName)?.Version;
+
+                items.Add(new VersionCompareItem
+                {
+                    Label = label,
+                    LocalVersion = local,
+                    CloudVersion = cloudVer,
+                    Result = Compare(local, cloudVer),
+                });
+            }
+        }
+
+        return new CloudAuditResult
+        {
+            Items = items,
+            EventType = eventKey is null ? null : EventDisplayName(eventKey),
+            CloudFetchedAt = cloud?.FetchedAt,
+            CloudFromCache = cloud?.FromCache ?? false,
+            HasCloudData = cloud is not null,
+        };
+    }
+
+    private static CompareResult Compare(string? local, string? cloud)
+    {
+        if (string.IsNullOrEmpty(local) || string.IsNullOrEmpty(cloud))
+            return CompareResult.Unknown;
+        return string.Equals(local.Trim(), cloud.Trim(), StringComparison.OrdinalIgnoreCase)
+            ? CompareResult.Match
+            : CompareResult.Mismatch;
+    }
+}

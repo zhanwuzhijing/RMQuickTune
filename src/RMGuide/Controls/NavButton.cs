@@ -1,7 +1,7 @@
 using System.Drawing.Drawing2D;
-using RMQuickTune.Core;
+using RMGuide.Core;
 
-namespace RMQuickTune.Controls;
+namespace RMGuide.Controls;
 
 /// <summary>侧边栏导航项：左侧选中指示条 + 悬浮/选中高亮。</summary>
 public sealed class NavButton : Control

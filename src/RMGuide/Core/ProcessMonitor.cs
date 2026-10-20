@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace RMQuickTune.Core;
+namespace RMGuide.Core;
 
 /// <summary>程序所属的分类（用于界面分栏）。</summary>
 public enum ProcessCategory
@@ -25,7 +25,7 @@ public static class ProcessCategoryInfo
     public static string Description(this ProcessCategory category) => category switch
     {
         ProcessCategory.Referee => "服务 / 引擎侧程序",
-        ProcessCategory.Player => "客户端侧程序",
+        ProcessCategory.Player => "自定义客户端侧程序",
         _ => string.Empty,
     };
 }

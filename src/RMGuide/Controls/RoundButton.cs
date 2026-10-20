@@ -1,7 +1,7 @@
 using System.Drawing.Drawing2D;
-using RMQuickTune.Core;
+using RMGuide.Core;
 
-namespace RMQuickTune.Controls;
+namespace RMGuide.Controls;
 
 /// <summary>圆角按钮，支持实心与描边（ghost）两种样式。</summary>
 public sealed class RoundButton : Control

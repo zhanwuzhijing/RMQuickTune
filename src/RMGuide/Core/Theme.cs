@@ -1,4 +1,4 @@
-namespace RMQuickTune.Core;
+namespace RMGuide.Core;
 
 /// <summary>
 /// 全局视觉主题：统一颜色、字体、圆角等，便于整体调整风格。

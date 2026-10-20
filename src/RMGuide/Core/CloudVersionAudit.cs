@@ -1,4 +1,4 @@
-namespace RMQuickTune.Core;
+namespace RMGuide.Core;
 
 /// <summary>单项版本对比结果。</summary>
 public sealed class VersionCompareItem

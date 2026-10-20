@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace RMQuickTune.Core;
+namespace RMGuide.Core;
 
 /// <summary>Engine 检测的整体结果。</summary>
 public sealed class EngineInfo

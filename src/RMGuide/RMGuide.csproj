@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -9,12 +9,12 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
 
     <!-- 应用元信息 -->
-    <AssemblyName>RMQuickTune</AssemblyName>
-    <RootNamespace>RMQuickTune</RootNamespace>
-    <Product>RMQuickTune</Product>
+    <AssemblyName>RMGuide</AssemblyName>
+    <RootNamespace>RMGuide</RootNamespace>
+    <Product>RMGuide</Product>
     <Company>zhanwuzhijing</Company>
     <Version>0.1.0</Version>
-    <Description>RoboMaster 赛事引擎配置检查工具（网络配置 / 依赖程序检测等）</Description>
+    <Description>RoboMaster 赛事引擎向导：让不熟悉电脑的人也能把赛事引擎跑起来（运行状态 / 版本校验 / 网络配置一键配好）</Description>
 
     <!-- 目标运行平台 -->
     <Platforms>AnyCPU;x64</Platforms>

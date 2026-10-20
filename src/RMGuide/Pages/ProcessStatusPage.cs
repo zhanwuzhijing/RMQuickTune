@@ -1,7 +1,7 @@
-using RMQuickTune.Controls;
-using RMQuickTune.Core;
+using RMGuide.Controls;
+using RMGuide.Core;
 
-namespace RMQuickTune.Pages;
+namespace RMGuide.Pages;
 
 /// <summary>
 /// 主界面：按「裁判端 / 选手端」分栏展示相关程序的运行状态。
@@ -29,6 +29,13 @@ public sealed class ProcessStatusPage : PageBase
 
     private readonly TableLayoutPanel _columns;
     private readonly List<CategoryColumn> _categoryColumns = new();
+
+    // 总览（默认视图）：只显示两类是否「运行正常 / 运行异常」
+    private readonly TableLayoutPanel _overview;
+    private readonly InfoCard _refereeCard;
+    private readonly InfoCard _playerCard;
+    private readonly RoundButton _detailBtn;
+    private bool _detailMode;
 
     // ExeName -> 卡片，刷新时直接定位
     private readonly Dictionary<string, ProcessCard> _cardByExe = new(StringComparer.OrdinalIgnoreCase);
@@ -132,13 +139,102 @@ public sealed class ProcessStatusPage : PageBase
             _columns.Controls.Add(col, i, 0);
         }
 
+        // ---- 总览区：默认只看「运行正常 / 运行异常」----
+        _overview = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Theme.ContentBg,
+            Padding = new Padding(22, 0, 22, 16),
+            ColumnCount = categories.Length,
+            RowCount = 1,
+        };
+        for (int i = 0; i < categories.Length; i++)
+            _overview.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / categories.Length));
+        _overview.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+        _refereeCard = new InfoCard { Height = 120 };
+        _playerCard = new InfoCard { Height = 120 };
+
+        for (int i = 0; i < categories.Length; i++)
+        {
+            var cat = categories[i];
+            var card = cat == ProcessCategory.Referee ? _refereeCard : _playerCard;
+
+            // 每个分类：上面是总览卡，下面常驻「一键关闭」按钮（两种视图都在）
+            var host = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Theme.ContentBg,
+                Margin = new Padding(i == 0 ? 0 : 8, 4, i == categories.Length - 1 ? 0 : 8, 0),
+            };
+
+            var closeBtn = new RoundButton("一键关闭")
+            {
+                Size = new Size(116, 32),
+                BaseColor = Theme.Danger,
+                Ghost = true,
+                Location = new Point(0, 130),
+            };
+            closeBtn.Click += (_, _) => OnCloseCategoryRequested(cat);
+
+            card.Dock = DockStyle.Top;
+
+            host.Controls.Add(closeBtn);
+            host.Controls.Add(card);
+
+            void Reposition() => closeBtn.Location = new Point(0, card.Bottom + 12);
+            host.Resize += (_, _) => Reposition();
+            card.SizeChanged += (_, _) => Reposition();
+
+            _overview.Controls.Add(host, i, 0);
+            Reposition();
+        }
+
+        // ---- 角落按钮：切换到子进程明细 ----
+        _detailBtn = new RoundButton("异常检测")
+        {
+            Size = new Size(104, 34),
+            Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
+            BaseColor = Theme.Accent,
+            Ghost = true,
+        };
+        _detailBtn.Click += (_, _) => ToggleDetail();
+
+        Controls.Add(_overview);
         Controls.Add(_columns);
+        Controls.Add(_detailBtn);
         Controls.Add(_header);
+        _detailBtn.BringToFront();
+
+        _columns.Visible = false;
+        _overview.Visible = true;
+
+        Resize += (_, _) => PositionDetailButton();
 
         PositionRefreshButton();
+        PositionDetailButton();
 
         _timer = new System.Windows.Forms.Timer { Interval = 2000 };
         _timer.Tick += (_, _) => RefreshStatus();
+    }
+
+    /// <summary>角落按钮定位（右下角）。</summary>
+    private void PositionDetailButton()
+    {
+        _detailBtn.Location = new Point(
+            ClientSize.Width - _detailBtn.Width - 26,
+            ClientSize.Height - _detailBtn.Height - 22);
+    }
+
+    /// <summary>在「总览」和「子进程明细」之间切换。</summary>
+    private void ToggleDetail()
+    {
+        _detailMode = !_detailMode;
+        _overview.Visible = !_detailMode;
+        _columns.Visible = _detailMode;
+        _detailBtn.Text = _detailMode ? "收起明细" : "异常检测";
+        _detailBtn.Invalidate();
+        RefreshStatus();
     }
 
     private void PositionRefreshButton()
@@ -240,11 +336,45 @@ public sealed class ProcessStatusPage : PageBase
             $"运行中 {running} / {statuses.Count}      最后刷新 {DateTime.Now:HH:mm:ss}";
         _summaryLabel.ForeColor = allUp ? Theme.Running : Theme.SubtleText;
 
+        UpdateOverview(statuses);
+
         UpdateEngineInfo();
 
         // 用内存中已有的云端数据（缓存或上次拉取）持续渲染比较结果。
         // 始终在 UI 线程执行（定时器/手动刷新均如此），不依赖异步拉取的线程时序。
         UpdateCloudInfo(_cloudChecker.Current);
+    }
+
+    /// <summary>更新总览卡片：全部在运行=运行正常，有缺失=运行异常。</summary>
+    private void UpdateOverview(IReadOnlyList<ProcessStatus> statuses)
+    {
+        UpdateOverviewCard(_refereeCard, ProcessCategory.Referee, statuses);
+        UpdateOverviewCard(_playerCard, ProcessCategory.Player, statuses);
+    }
+
+    private static void UpdateOverviewCard(InfoCard card, ProcessCategory category,
+        IReadOnlyList<ProcessStatus> statuses)
+    {
+        var items = statuses.Where(s => s.Category == category).ToList();
+        int total = items.Count;
+        int running = items.Count(s => s.IsRunning);
+        bool allRunning = total > 0 && running == total;
+
+        // 未运行不算异常：现场常常只跑其中一部分程序。
+        // 总览里只给数量，不写具体子进程名字（名字留到「异常检测」明细里看）。
+        var lines = new List<string>
+        {
+            $"{running} / {total} 个程序在运行",
+        };
+        if (running == 0)
+            lines.Add("当前没有该类程序在运行");
+
+        card.SetContent(category.DisplayName(),
+            allRunning ? "运行正常" : running == 0 ? "未启动" : "部分运行",
+            allRunning ? Theme.Running : Theme.Stopped,
+            allRunning ? Theme.RunningSoft : Theme.StoppedSoft,
+            allRunning ? Theme.Running : Theme.Stopped,
+            lines);
     }
 
     /// <summary>检测并展示 Engine 版本与 Server 归属校验结果。</summary>

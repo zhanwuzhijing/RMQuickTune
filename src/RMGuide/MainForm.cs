@@ -1,8 +1,8 @@
-using RMQuickTune.Controls;
-using RMQuickTune.Core;
-using RMQuickTune.Pages;
+using RMGuide.Controls;
+using RMGuide.Core;
+using RMGuide.Pages;
 
-namespace RMQuickTune;
+namespace RMGuide;
 
 /// <summary>
 /// 主窗体：左侧可扩展功能侧边栏，右侧内容区。
@@ -20,7 +20,7 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = "RMQuickTune - RoboMaster 配置检查工具";
+        Text = "赛事引擎向导 - RoboMaster 配置检查工具";
         MinimumSize = new Size(960, 600);
         ClientSize = new Size(1280, 800);
         StartPosition = FormStartPosition.CenterScreen;
@@ -77,7 +77,7 @@ public sealed class MainForm : Form
 
         var title = new Label
         {
-            Text = "QuickTune",
+            Text = "引擎向导",
             Font = Theme.Brand,
             ForeColor = Color.White,
             AutoSize = true,
@@ -105,8 +105,8 @@ public sealed class MainForm : Form
     private void RegisterPages()
     {
         AddPage(new ProcessStatusPage());
+        AddPage(new NetworkConfigPage());
         // 后续功能页示例：
-        // AddPage(new NetworkConfigPage());
         // AddPage(new DependencyCheckPage());
     }
 

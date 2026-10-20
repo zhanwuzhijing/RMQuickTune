@@ -1,7 +1,7 @@
 using System.Drawing.Drawing2D;
-using RMQuickTune.Core;
+using RMGuide.Core;
 
-namespace RMQuickTune.Controls;
+namespace RMGuide.Controls;
 
 /// <summary>
 /// 单个分类栏：顶部为分类标题 + 运行计数徽章，下方为该分类的程序卡片列表（可滚动）。

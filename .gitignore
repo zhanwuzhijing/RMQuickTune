@@ -1,3 +1,11 @@
+# ---- Agent / AI 工具痕迹（不进仓库）----
+.workbuddy/
+.opencode/
+.claude/
+.cursor/
+CLAUDE.md
+AGENTS.md
+
 # ---- 构建产物 ----
 [Bb]in/
 [Oo]bj/

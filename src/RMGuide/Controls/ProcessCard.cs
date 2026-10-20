@@ -1,7 +1,7 @@
 using System.Drawing.Drawing2D;
-using RMQuickTune.Core;
+using RMGuide.Core;
 
-namespace RMQuickTune.Controls;
+namespace RMGuide.Controls;
 
 /// <summary>
 /// 单个程序运行状态卡片：左侧状态灯，中间程序名，右侧状态徽章。

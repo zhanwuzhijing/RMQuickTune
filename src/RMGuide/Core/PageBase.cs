@@ -1,4 +1,4 @@
-namespace RMQuickTune.Core;
+namespace RMGuide.Core;
 
 /// <summary>
 /// 所有功能页面的抽象基类。

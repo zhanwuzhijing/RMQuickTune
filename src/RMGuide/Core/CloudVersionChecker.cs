@@ -1,7 +1,7 @@
 using System.Net.Http;
 using System.Text.Json;
 
-namespace RMQuickTune.Core;
+namespace RMGuide.Core;
 
 /// <summary>云端单个固件条目的版本信息。</summary>
 public sealed class CloudFirmware
@@ -38,7 +38,7 @@ public sealed class CloudVersionChecker
 
     private static readonly string CacheDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "RMQuickTune");
+        "RMGuide");
 
     private static readonly string CachePath = Path.Combine(CacheDir, "cloud_versions.json");
 
@@ -47,7 +47,7 @@ public sealed class CloudVersionChecker
     private static HttpClient CreateHttpClient()
     {
         var c = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-        c.DefaultRequestHeaders.Add("User-Agent", "RMQuickTune");
+        c.DefaultRequestHeaders.Add("User-Agent", "RMGuide");
         return c;
     }
 
